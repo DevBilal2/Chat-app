@@ -1,21 +1,25 @@
 /* global ZOHO */
 import { useState, useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import ChannelModal from "./ChannelModal";
+import { fetchMessages, markHighlighted } from "../Store/MessageSlice";
 
 export default function Sidebar({
   onSelectPerson,
   onSelectChat,
   allUsers,
-  allMessages: initialMessages = [],
   currentUser,
 }) {
+  const dispatch = useDispatch();
+  const messages = useSelector((state) => state.messages.all);
+
   const [showModal, setShowModal] = useState(false);
   const [ikeObmUsers, setIkeObmUsers] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [channels, setChannels] = useState([]);
-  const [allMessages, setAllMessages] = useState(initialMessages);
-  const [sidebarOpen, setSidebarOpen] = useState(false); // for small screens
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Fetch channels for current user
   useEffect(() => {
     if (!currentUser) return;
     ZOHO.CREATOR.DATA.getRecords({
@@ -25,13 +29,12 @@ export default function Sidebar({
       .then((res) => {
         const allChannels = res.data || [];
         const userChannels = allChannels
-          .filter((chan) => {
-            const members = chan.RecievedByC || "";
-            return members
+          .filter((chan) =>
+            (chan.RecievedByC || "")
               .split(",")
               .map((m) => m.trim().toLowerCase())
-              .includes(currentUser.toLowerCase());
-          })
+              .includes(currentUser.toLowerCase())
+          )
           .filter(
             (chan, index, self) =>
               index ===
@@ -39,35 +42,46 @@ export default function Sidebar({
           );
         setChannels(userChannels);
       })
-      .catch((err) => console.error("Error fetching channels:", err));
+      .catch(console.error);
   }, [currentUser]);
 
+  // Classify users
   useEffect(() => {
     setIkeObmUsers(allUsers.filter((u) => u.Role === "IKE Admin"));
     setTechnicians(allUsers.filter((u) => u.Role === "Field Technician"));
   }, [allUsers]);
 
+  // Poll messages every 5 seconds
+  useEffect(() => {
+    if (!currentUser) return;
+    dispatch(fetchMessages(currentUser));
+    const interval = setInterval(
+      () => dispatch(fetchMessages(currentUser)),
+      5000
+    );
+    return () => clearInterval(interval);
+  }, [currentUser, dispatch]);
+
+  // Compute unread highlights
   const unreadHighlights = {};
-  const myEmail = currentUser.toLowerCase();
-  console.log(myEmail);
+  const myEmail = currentUser?.toLowerCase();
   const myName = allUsers
-    .find((u) => u.Email.toLowerCase() === myEmail)
+    .find((u) => u.Email?.toLowerCase() === myEmail)
     ?.Name?.toLowerCase();
-  console.log(myName);
-  allMessages.forEach((msg) => {
+
+  messages.forEach((msg) => {
     const needHighlight = String(msg.Need_Highlight).toLowerCase() === "true";
     const alreadyHighlighted =
       String(msg.Already_Highlighted).toLowerCase() === "true";
     if (!needHighlight || alreadyHighlighted) return;
 
     const messageText = (msg.Message || "").toLowerCase();
-    if (msg.ChannelName && msg.RecievedByC) {
+    if (msg.ChannelName && msg.RecievedByC && myName) {
       const members = msg.RecievedByC.split(",").map((m) =>
         m.trim().toLowerCase()
       );
-      if (myName && messageText.includes(`@${myName}`)) {
+      if (messageText.includes(`@${myName}`))
         unreadHighlights[msg.ChannelName] = true;
-      }
     }
 
     if (!msg.ChannelName) {
@@ -82,62 +96,47 @@ export default function Sidebar({
     }
   });
 
+  const markMessageInZoho = (msg, reportName) => {
+    ZOHO.CREATOR.DATA.updateRecordById({
+      app_name: "admiral-field-portal",
+      report_name: reportName,
+      id: msg.ID,
+      payload: { data: { Already_Highlighted: "true" } },
+    }).then(() => console.log("Marked seen:", msg.ID));
+  };
+
   const handleChannelClick = (channel) => {
     onSelectChat(channel);
-    setSidebarOpen(false); // close on small screens
-    const updatedMessages = allMessages.map((msg) =>
-      msg.ChannelName === channel.ChannelName
-        ? { ...msg, Already_Highlighted: "true" }
-        : msg
-    );
-    setAllMessages(updatedMessages);
-    updatedMessages.forEach((msg) => {
-      if (
-        msg.ChannelName === channel.ChannelName &&
-        String(msg.Need_Highlight).toLowerCase() === "true"
-      ) {
-        ZOHO.CREATOR.DATA.updateRecordById({
-          app_name: "admiral-field-portal",
-          report_name: "ChannelsHiddenForm_Report",
-          id: msg.ID,
-          payload: { data: { Already_Highlighted: "true" } },
-        }).then(() => console.log("Channel message marked as seen:", msg.ID));
-      }
-    });
+    setSidebarOpen(false);
+
+    messages
+      .filter(
+        (msg) => msg.ChannelName === channel.ChannelName && msg.Need_Highlight
+      )
+      .forEach((msg) => {
+        dispatch(markHighlighted({ id: msg.ID }));
+        markMessageInZoho(msg, "ChannelsHiddenForm_Report");
+      });
   };
 
   const handlePersonClick = (person) => {
     onSelectPerson(person);
-    setSidebarOpen(false); // close on small screens
-    const updatedMessages = allMessages.map((msg) =>
-      !msg.ChannelName &&
-      ((msg.SentBy?.toLowerCase() === person.Email.toLowerCase() &&
-        msg.RecievedBy?.toLowerCase() === currentUser.toLowerCase()) ||
-        (msg.RecievedBy?.toLowerCase() === person.Email.toLowerCase() &&
-          msg.SentBy?.toLowerCase() === currentUser.toLowerCase()))
-        ? { ...msg, Already_Highlighted: "true" }
-        : msg
-    );
-    setAllMessages(updatedMessages);
-    updatedMessages.forEach((msg) => {
-      if (
-        !msg.ChannelName &&
-        String(msg.Need_Highlight).toLowerCase() === "true" &&
-        ((msg.SentBy?.toLowerCase() === person.Email.toLowerCase() &&
-          msg.RecievedBy?.toLowerCase() === currentUser.toLowerCase()) ||
-          (msg.RecievedBy?.toLowerCase() === person.Email.toLowerCase() &&
-            msg.SentBy?.toLowerCase() === currentUser.toLowerCase()))
-      ) {
-        ZOHO.CREATOR.DATA.updateRecordById({
-          app_name: "admiral-field-portal",
-          report_name: "PersonToPersonHiddenForm_Report",
-          id: msg.ID,
-          payload: { data: { Already_Highlighted: "true" } },
-        }).then(() =>
-          console.log("Person-to-person message marked as seen:", msg.ID)
-        );
-      }
-    });
+    setSidebarOpen(false);
+
+    messages
+      .filter(
+        (msg) =>
+          !msg.ChannelName &&
+          ((msg.SentBy?.toLowerCase() === person.Email.toLowerCase() &&
+            msg.RecievedBy?.toLowerCase() === myEmail) ||
+            (msg.RecievedBy?.toLowerCase() === person.Email.toLowerCase() &&
+              msg.SentBy?.toLowerCase() === myEmail)) &&
+          msg.Need_Highlight
+      )
+      .forEach((msg) => {
+        dispatch(markHighlighted({ id: msg.ID }));
+        markMessageInZoho(msg, "PersonToPersonHiddenForm_Report");
+      });
   };
 
   return (
@@ -152,7 +151,8 @@ export default function Sidebar({
           }}
         />
       )}
-      {/* Hamburger button for small screens */}
+
+      {/* Hamburger button */}
       <button
         className="sm:hidden fixed top-4 left-4 z-50 p-1 text-black rounded shadow"
         onClick={() => setSidebarOpen(true)}
@@ -160,7 +160,7 @@ export default function Sidebar({
         ☰
       </button>
 
-      {/* Sidebar overlay for small screens */}
+      {/* Overlay */}
       <div
         className={`fixed inset-0 z-40 transition-all duration-200 bg-black/40 ${
           sidebarOpen ? "opacity-100 visible" : "opacity-0 invisible"
@@ -168,6 +168,7 @@ export default function Sidebar({
         onClick={() => setSidebarOpen(false)}
       ></div>
 
+      {/* Sidebar */}
       <div
         className={`fixed sm:relative z-50 top-0 left-0 h-full w-56 bg-[#23272a] text-white flex flex-col overflow-hidden transform transition-transform duration-200 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full sm:translate-x-0"
@@ -186,7 +187,7 @@ export default function Sidebar({
                 +
               </button>
             </div>
-            {channels.length > 0 ? (
+            {channels.length ? (
               channels.map((chan) => {
                 const hasHighlight = unreadHighlights[chan.ChannelName];
                 return (
@@ -215,7 +216,7 @@ export default function Sidebar({
             <h3 className="text-base font-semibold mb-2 text-gray-200">
               IKE / OBM
             </h3>
-            {ikeObmUsers.length > 0 ? (
+            {ikeObmUsers.length ? (
               ikeObmUsers.map((user) => {
                 const hasHighlight = unreadHighlights[user.Email];
                 return (
@@ -244,7 +245,7 @@ export default function Sidebar({
             <h3 className="text-sm font-semibold text-gray-200 mb-1">
               Technicians
             </h3>
-            {technicians.length > 0 ? (
+            {technicians.length ? (
               technicians.map((tech) => {
                 const hasHighlight = unreadHighlights[tech.Email];
                 return (

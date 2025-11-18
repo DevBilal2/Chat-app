@@ -20,7 +20,7 @@ export default function MessageList({
     return user?.Name || email || "Unknown";
   };
 
-  const pinnedMessages = messages.filter((msg) => msg.Pin === "true");
+  const pinnedMessages = messages.filter((msg) => msg.Pin === true);
 
   const scrollToMessage = (msgId) => {
     const el = messageRefs[msgId];
@@ -53,12 +53,18 @@ export default function MessageList({
   }, []);
 
   useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop =
-        scrollContainerRef.current.scrollHeight;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      50;
+
+    // Only scroll if the user is near the bottom
+    if (isNearBottom) {
+      container.scrollTop = container.scrollHeight;
     }
   }, [messages]);
-
   const sortedMessages = [...messages].sort((a, b) => {
     const timeA = a.Added_Time ? new Date(a.Added_Time).getTime() : 0;
     const timeB = b.Added_Time ? new Date(b.Added_Time).getTime() : 0;
@@ -91,9 +97,8 @@ export default function MessageList({
         <span
           key={`${mention}-${match.index}`}
           style={{
-            color: "#FFEE8C", // nice solid blue
+            color: "#00000", // nice solid blue
             fontWeight: 600,
-            backgroundColor: "rgba(59, 130, 246, 0.12)",
             padding: "0 2px",
             borderRadius: "4px",
           }}
@@ -108,7 +113,7 @@ export default function MessageList({
     }
     return parts;
   };
-
+  console.log(pinnedMessages);
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Pinned Messages */}
@@ -180,7 +185,7 @@ export default function MessageList({
                             setOpenDropdownId(null);
                           }}
                         >
-                          {msg.Pin === "true" ? "Unpin" : "Pin"}
+                          {msg.Pin === true ? "Unpin" : "Pin"}
                         </button>
                         <button
                           className={`${dropdownButtonClasses} text-red-500`}
