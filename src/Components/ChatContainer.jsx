@@ -18,6 +18,7 @@ export default function ChatContainer({
   const [messages, setMessages] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const combinedMessages = [...messages, ...localMessages];
+
   // ========================
   // Format date for Zoho
   // ========================
@@ -67,29 +68,20 @@ export default function ChatContainer({
     // Sort by date
     filtered.sort((a, b) => new Date(a.Added_Time) - new Date(b.Added_Time));
 
-    // Merge local messages that might not exist in allMessages yet
-    setMessages((prev) => {
-      const existingIds = new Set(filtered.map((m) => m.ID));
-      const newLocal = prev.filter((m) => m.local && !existingIds.has(m.ID));
-      return [...filtered, ...newLocal];
-    });
+    setMessages(filtered);
   }, [activeChannel, activePerson, allMessages, currentUser]);
 
   // ========================
   // Handle pin/unpin a message
   // ========================
   const handlePinToggle = (msg) => {
-    const newPin = msg.Pin === true ? false : true;
+    const newPin = msg.Pin === true || msg.Pin === "true" ? false : true;
 
-    // Update local state
     setMessages((prev) =>
       prev.map((m) => (m.ID === msg.ID ? { ...m, Pin: newPin } : m))
     );
-
-    // Update Redux
     dispatch(updateMessage({ id: msg.ID, changes: { Pin: newPin } }));
 
-    // Update Zoho
     const formName = msg.ChannelName
       ? "ChannelsHiddenForm_Report"
       : "PersonToPersonHiddenForm_Report";
@@ -127,40 +119,45 @@ export default function ChatContainer({
   // ========================
   // Handle send message
   // ========================
-  const handleSendMessage = async (text) => {
-    if (!text) return;
 
-    const lowerText = text.toLowerCase();
+  // ========================
+  // Handle send message
+  // ========================
+
+  const handleSendMessage = async ({ text, file }) => {
+    const messageText = text || "";
+    const lowerText = messageText.toLowerCase();
+
+    if (!messageText && !file) return; // nothing to send
+
     const mentionDetected = allUsers.some((u) =>
       lowerText.includes(`@${u.Name?.toLowerCase()}`)
     );
     const Mentioned = mentionDetected ? "true" : "false";
     const Notified = "false";
 
+    const tempId = Date.now().toString();
     const tempMsg = {
-      ID: Date.now().toString(), // temporary ID
-      Message: text,
+      ID: tempId,
+      Message: messageText,
       SentBy: currentUser,
       Added_Time: formatZohoDateTime(new Date()),
       local: true,
       Mentioned,
       Notified,
       Pin: "false",
+      File: file ? file.name : null, // store filename locally
     };
 
-    // 1️⃣ Immediately append locally
     setLocalMessages((prev) => [...prev, tempMsg]);
-
-    // 2️⃣ Add to Redux (optional, keeps store updated)
     dispatch(addMessage(tempMsg));
 
-    // 3️⃣ Send to backend
     const isChannel = !!activeChannel;
     const payload = isChannel
       ? {
           IDC: activeChannel.IDC,
           ChannelName: activeChannel.ChannelName,
-          Message: text,
+          Message: messageText,
           SentBy: currentUser,
           RecievedByC: activeChannel.RecievedByC,
           Need_Highlight: Mentioned,
@@ -169,19 +166,40 @@ export default function ChatContainer({
       : {
           SentBy: currentUser,
           RecievedBy: activePerson.Email,
-          Message: text,
+          Message: messageText,
           Need_Highlight: Mentioned,
           Already_Highlighted: Notified,
         };
 
+    // Add record to Zoho
+    console.log(payload);
+    console.log("file : ", file);
     ZOHO.CREATOR.DATA.addRecords({
       app_name: "admiral-field-portal",
       form_name: isChannel ? "ChannelsHiddenForm" : "PersonToPersonHiddenForm",
       payload: { data: payload },
     }).then((res) => {
-      console.log("Message sent:", res);
-      // remove temp message or replace ID with backend ID
-      setLocalMessages((prev) => prev.filter((m) => m.ID !== tempMsg.ID));
+      console.log("Record created:", res);
+
+      const recordId = res.data && res.data.ID;
+      console.log(recordId);
+      // Upload file if attached
+      var config1 = {
+        app_name: "admiral-field-portal",
+        report_name: "ChannelsHiddenForm_Report",
+        id: recordId,
+        field_name: "File_upload",
+        file: file,
+      };
+      console.log(config1);
+      if (recordId) {
+        ZOHO.CREATOR.FILE.uploadFile(config1).then(function (response) {
+          console.log("File uploaded:", response);
+        });
+      }
+
+      // Remove temp message
+      setLocalMessages((prev) => prev.filter((m) => m.ID !== tempId));
     });
   };
 
@@ -197,6 +215,19 @@ export default function ChatContainer({
     ? activeChannel.ChannelName
     : activePerson?.Name || "Unknown User";
 
+  // ========================
+  // Filter messages by search term
+  // ========================
+  const filteredMessages = combinedMessages.filter((msg) => {
+    if (!searchTerm) return true;
+    const lower = searchTerm.toLowerCase();
+    return (
+      msg.Message?.toLowerCase().includes(lower) ||
+      msg.SentBy?.toLowerCase().includes(lower) ||
+      msg.RecievedBy?.toLowerCase().includes(lower)
+    );
+  });
+
   return (
     <div className="flex flex-col flex-1 bg-gray-50">
       <div className="flex items-center justify-center border-b border-gray-300 bg-gray-100 p-3">
@@ -211,7 +242,7 @@ export default function ChatContainer({
 
       <ChatHeader title={chatTitle} />
       <MessageList
-        messages={combinedMessages}
+        messages={filteredMessages}
         currentUser={currentUser}
         allUsers={allUsers}
         onMessageClick={handleMessageClick}

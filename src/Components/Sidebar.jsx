@@ -9,6 +9,7 @@ export default function Sidebar({
   onSelectChat,
   allUsers,
   currentUser,
+  onNotify,
 }) {
   const dispatch = useDispatch();
   const messages = useSelector((state) => state.messages.all);
@@ -95,6 +96,63 @@ export default function Sidebar({
       }
     }
   });
+  useEffect(() => {
+    if (!currentUser || !myName) return;
+
+    messages.forEach((msg) => {
+      const needHighlight = String(msg.Need_Highlight).toLowerCase() === "true";
+      const appNotif = String(msg.App_Notification).toLowerCase() === "true";
+      const alreadyHighlighted =
+        String(msg.Already_Highlighted).toLowerCase() === "true";
+
+      // Only notify if need highlight AND not already notified
+      if (!needHighlight || appNotif || alreadyHighlighted) return;
+
+      let shouldNotify = false;
+
+      // Channel messages
+      if (msg.ChannelName && msg.RecievedByC) {
+        const members = msg.RecievedByC.split(",").map((m) =>
+          m.trim().toLowerCase()
+        );
+        if (members.includes(myEmail)) shouldNotify = true;
+      }
+
+      // Person-to-person messages
+      if (!msg.ChannelName) {
+        const isMine =
+          msg.SentBy?.toLowerCase() === myEmail ||
+          msg.RecievedBy?.toLowerCase() === myEmail;
+        if (isMine) shouldNotify = true;
+      }
+
+      if (shouldNotify) {
+        // Trigger in-app notification (replace with your UI notification)
+        console.log("App Notification:", msg.Message);
+        if (typeof onNotify === "function") {
+          const targetId =
+            msg.ChannelName ||
+            (msg.SentBy?.toLowerCase() === myEmail
+              ? msg.RecievedBy
+              : msg.SentBy);
+          const senderName = msg.SentByName || msg.SentBy; // fallback
+          const messageText = msg.Message || "";
+          onNotify(targetId, senderName, messageText);
+        }
+        // Update App_Notification so it does not notify again
+        const reportName = msg.ChannelName
+          ? "ChannelsHiddenForm_Report"
+          : "PersonToPersonHiddenForm_Report";
+
+        ZOHO.CREATOR.DATA.updateRecordById({
+          app_name: "admiral-field-portal",
+          report_name: reportName,
+          id: msg.ID,
+          payload: { data: { App_Notification: "true" } },
+        }).then(() => console.log("App notification marked:", msg.ID));
+      }
+    });
+  }, [messages, currentUser, myEmail, myName]);
 
   const markMessageInZoho = (msg, reportName) => {
     ZOHO.CREATOR.DATA.updateRecordById({

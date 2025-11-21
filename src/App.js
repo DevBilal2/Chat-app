@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Sidebar from "./Components/Sidebar";
 import ChatContainer from "./Components/ChatContainer";
-
+import Notification from "./Components/Notification";
 export default function App() {
   const [currentUser, setCurrentUser] = useState("");
   const [allUsers, setAllUsers] = useState([]);
@@ -10,15 +10,22 @@ export default function App() {
   const [activePerson, setActivePerson] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // messages come from ChatContainer now
   const [chatMessages, setChatMessages] = useState([]);
 
+  // 🔔 Keep track of notifications by chat target (email or channel)
+  const [notifications, setNotifications] = useState({});
+
+  // 🟢 Top notification banner
+  const [topNotification, setTopNotification] = useState("");
+
+  // ========== Load Initial User ==========
   useEffect(() => {
     ZOHO.CREATOR.UTIL.getInitParams().then((res) => {
       if (res?.loginUser) setCurrentUser(res.loginUser);
     });
   }, []);
 
+  // ========== Load All Users ==========
   useEffect(() => {
     if (!currentUser) return;
 
@@ -40,14 +47,41 @@ export default function App() {
     fetchUsers();
   }, [currentUser]);
 
+  // ========== Handle Selecting a Person ==========
   const handleSelectPerson = (person) => {
     setActivePerson(person);
     setActiveChannel(null);
+
+    // 🔕 Clear notifications for this person
+    setNotifications((prev) => ({
+      ...prev,
+      [person.Email]: 0,
+    }));
   };
 
+  // ========== Handle Selecting a Channel ==========
   const handleSelectChannel = (channel) => {
     setActiveChannel(channel);
     setActivePerson(null);
+
+    // 🔕 Clear notifications for this channel
+    setNotifications((prev) => ({
+      ...prev,
+      [channel.ChannelName]: 0,
+    }));
+  };
+  const handleCloseNotification = () => setTopNotification("");
+  // 🔔 Trigger a notification
+  const handleNotify = (targetId, senderName, messageText) => {
+    // Increment notification count
+    setNotifications((prev) => ({
+      ...prev,
+      [targetId]: (prev[targetId] || 0) + 1,
+    }));
+
+    // Show top banner
+    setTopNotification(`${senderName} mentioned you: "${messageText}"`);
+    setTimeout(() => setTopNotification(""), 4000); // auto-hide after 4s
   };
 
   if (loading) {
@@ -57,17 +91,29 @@ export default function App() {
       </div>
     );
   }
-
+  console.log(topNotification);
   return (
-    <div className="flex h-screen overflow-hidden font-sans">
+    <div className="flex h-screen overflow-hidden font-sans relative">
+      {/* Top Notification */}
+      {topNotification && (
+        <Notification
+          message={topNotification}
+          onClose={handleCloseNotification}
+        />
+      )}
+
       <Sidebar
         allUsers={allUsers}
         currentUser={currentUser}
-        messages={chatMessages} // get messages from ChatContainer
+        messages={chatMessages}
+        notifications={notifications} // Pass notifications to sidebar
         activeChannel={activeChannel}
         activePerson={activePerson}
         onSelectPerson={handleSelectPerson}
         onSelectChat={handleSelectChannel}
+        onNotify={(targetId, senderName, messageText) =>
+          handleNotify(targetId, senderName, messageText)
+        }
       />
 
       <ChatContainer
@@ -75,7 +121,8 @@ export default function App() {
         currentUser={currentUser}
         activeChannel={activeChannel}
         activePerson={activePerson}
-        onMessagesUpdate={setChatMessages} // callback updates Sidebar
+        onMessagesUpdate={setChatMessages}
+        // Pass notification handler
       />
     </div>
   );

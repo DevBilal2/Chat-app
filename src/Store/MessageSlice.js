@@ -29,7 +29,7 @@ export const fetchMessages = createAsyncThunk(
         Pin: msg.Pin === "true",
       })),
     ].sort((a, b) => new Date(a.Added_Time) - new Date(b.Added_Time));
-
+    // console.log(allMsgs);
     return allMsgs;
   }
 );
@@ -47,10 +47,15 @@ const messagesSlice = createSlice({
       if (msg) msg.Already_Highlighted = true;
     },
     addMessage: (state, action) => {
-      // Avoid duplicates: check by ID
       const exists = state.all.find((m) => m.ID === action.payload.ID);
-      if (!exists) state.all.push(action.payload);
+      if (!exists) {
+        state.all.push({
+          ...action.payload,
+          fileUrl: action.payload.fileUrl || null, // for actual URL from Zoho
+        });
+      }
     },
+
     updateMessage: (state, action) => {
       // payload: { id, changes: { Pin: "true", ... } }
       const { id, changes } = action.payload;
@@ -64,11 +69,22 @@ const messagesSlice = createSlice({
         state.loading = true;
       })
       .addCase(fetchMessages.fulfilled, (state, action) => {
-        state.all = action.payload;
         state.loading = false;
-      })
-      .addCase(fetchMessages.rejected, (state) => {
-        state.loading = false;
+
+        const fetched = action.payload || [];
+        const fetchedIds = new Set(fetched.map((m) => m.ID));
+
+        // Get local/temp/failed messages BEFORE overwriting
+        const localMsgs = (state.all || []).filter(
+          (m) => m.local || m.sending || m.failed
+        );
+
+        const localsToKeep = localMsgs.filter((m) => !fetchedIds.has(m.ID));
+
+        // Now safely merge
+        state.all = [...fetched, ...localsToKeep].sort(
+          (a, b) => new Date(a.Added_Time) - new Date(b.Added_Time)
+        );
       });
   },
 });
