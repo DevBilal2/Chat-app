@@ -46,7 +46,6 @@ export default function ChatContainer({
     const seconds = String(d.getSeconds()).padStart(2, "0");
     return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
   };
-
   // ========================
   // Filter messages for active chat
   // ========================
@@ -240,7 +239,11 @@ export default function ChatContainer({
         />
       </div>
 
-      <ChatHeader title={chatTitle} />
+      <ChatHeader
+        title={chatTitle}
+        members={activeChannel?.RecievedByC || activePerson.Email}
+        allUsers={allUsers}
+      />
       <MessageList
         messages={filteredMessages}
         currentUser={currentUser}

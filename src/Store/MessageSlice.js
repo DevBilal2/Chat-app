@@ -29,7 +29,7 @@ export const fetchMessages = createAsyncThunk(
         Pin: msg.Pin === "true",
       })),
     ].sort((a, b) => new Date(a.Added_Time) - new Date(b.Added_Time));
-    // console.log(allMsgs);
+    console.log(allMsgs);
     return allMsgs;
   }
 );

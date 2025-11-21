@@ -17,6 +17,7 @@ const DownloadIcon = ({ className = "" }) => (
     />
   </svg>
 );
+
 const CloseIcon = ({ className = "" }) => (
   <svg
     className={`w-6 h-6 ${className}`}
@@ -34,7 +35,6 @@ const CloseIcon = ({ className = "" }) => (
   </svg>
 );
 
-// New Icon for Generic Files (Document Placeholder)
 const DocumentIcon = ({ className = "" }) => (
   <svg
     className={`w-6 h-6 ${className}`}
@@ -51,7 +51,30 @@ const DocumentIcon = ({ className = "" }) => (
     />
   </svg>
 );
-// -------------------------
+
+const MicrophoneIcon = ({ className = "" }) => (
+  <svg
+    className={`w-6 h-6 ${className}`}
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M19 11a7 7 0 01-7 7v1h2v-1a5 5 0 005-5h-2z"
+    />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M12 18V20m0-8V2h2v10h-2z"
+    />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
 
 export default function MessageList({
   messages,
@@ -63,7 +86,6 @@ export default function MessageList({
 }) {
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [openDropdownId, setOpenDropdownId] = useState(null);
-  // New state for the full-screen image viewer
   const [fullScreenImage, setFullScreenImage] = useState(null);
 
   const dropdownRef = useRef(null);
@@ -91,7 +113,6 @@ export default function MessageList({
     setOpenDropdownId(openDropdownId === msgId ? null : msgId);
   };
 
-  // Handler to open the full-screen image
   const handleImageClick = (url) => {
     setFullScreenImage(url);
   };
@@ -164,32 +185,32 @@ export default function MessageList({
     return parts;
   };
 
-  // Helper to determine if the file is an image
   const isImageFile = (fileName) => {
     if (!fileName) return false;
     const extension = fileName.split(".").pop().toLowerCase();
     return ["jpg", "jpeg", "png", "gif", "webp"].includes(extension);
   };
 
+  const isAudioFile = (fileName) => {
+    if (!fileName) return false;
+    const extension = fileName.split(".").pop().toLowerCase();
+    return ["mp3", "ogg", "wav", "webm", "m4a"].includes(extension);
+  };
+
   const getCreatorFileUrl = (fileUpload) => {
     if (!fileUpload) return null;
 
-    // Remove the leading "/" so that the split array starts with the first meaningful part
     const cleanedPath = fileUpload.startsWith("/")
       ? fileUpload.substring(1)
       : fileUpload;
 
-    // Split by "/"
     const parts = cleanedPath.split("/");
 
-    // The indices below are relative to the 'cleanedPath' split array
     const appOwner = parts[2];
     const appName = parts[3];
     const reportName = parts[5];
     const recordId = parts[6];
     const fieldName = parts[7];
-
-    // Extract filename from the last part which contains the query param
     const lastPart = parts[8];
     const filepathParam = lastPart ? lastPart.split("filepath=")[1] : null;
     const fileName = filepathParam || "unknown_file";
@@ -199,13 +220,11 @@ export default function MessageList({
     const channelMessageToken =
       "4ZB8d90knQygt877HUqDStQuHD9xPqhDNZBhrhgq1KCBanwVjkHO0qEYEJrnKwD25M4Og5pDGnDHS4W5NXDgpjCrFnvNOZ5CsBnd";
 
-    // Decide which dummy token to use
     const token =
       reportName === "ChannelsHiddenForm_Report"
         ? channelMessageToken
         : personMessageToken;
 
-    // Construct the correct public URL:
     const finalUrl = `https://creatorapp.zoho.com/${appOwner}/${appName}/report/${reportName}/${recordId}/${fieldName}/download-file/${token}?filepath=${fileName}`;
 
     return { url: finalUrl, fileName: fileName };
@@ -213,7 +232,6 @@ export default function MessageList({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      {/* Pinned Messages */}
       {pinnedMessages.length > 0 && (
         <div className="flex flex-col w-full z-10">
           {pinnedMessages.map((msg) => (
@@ -242,7 +260,6 @@ export default function MessageList({
         </div>
       )}
 
-      {/* Messages */}
       <div
         className="flex-1 overflow-y-auto p-1 flex flex-col-reverse"
         ref={scrollContainerRef}
@@ -256,6 +273,7 @@ export default function MessageList({
           const fileUrl = fileData ? fileData.url : null;
           const fileName = fileData ? fileData.fileName : null;
           const isImage = fileName ? isImageFile(fileName) : false;
+          const isAudio = fileName ? isAudioFile(fileName) : false;
 
           return (
             <div
@@ -328,33 +346,56 @@ export default function MessageList({
                     {fileUrl && (
                       <div className="mt-1 relative">
                         {isImage ? (
-                          <>
-                            <button
-                              onClick={() => handleImageClick(fileUrl)}
-                              className="block relative focus:outline-none focus:ring-2 focus:ring-blue-400 rounded"
+                          <button
+                            onClick={() => handleImageClick(fileUrl)}
+                            className="block relative focus:outline-none focus:ring-2 focus:ring-blue-400 rounded"
+                          >
+                            <img
+                              src={fileUrl}
+                              alt={fileName || "Attached Image"}
+                              className="w-48 h-48 rounded border object-cover cursor-pointer"
+                            />
+                            <a
+                              href={fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download={fileName}
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute top-1 right-1 p-1 bg-black bg-opacity-40 rounded-full cursor-pointer transition-opacity hover:opacity-100 opacity-80"
+                              title="Download File"
                             >
-                              <img
-                                src={fileUrl}
-                                alt={fileName || "Attached Image"}
-                                className="w-48 h-48 rounded border object-cover cursor-pointer"
-                              />
-                              {/* Download Icon (Top Right) */}
-                              <a
-                                href={fileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                download={fileName}
-                                // Prevent modal from opening when clicking the download icon
-                                onClick={(e) => e.stopPropagation()}
-                                className="absolute top-1 right-1 p-1 bg-black bg-opacity-40 rounded-full cursor-pointer transition-opacity hover:opacity-100 opacity-80"
-                                title="Download File"
-                              >
-                                <DownloadIcon className="w-4 h-4 text-white" />
-                              </a>
-                            </button>
-                          </>
+                              <DownloadIcon className="w-4 h-4 text-white" />
+                            </a>
+                          </button>
+                        ) : isAudio ? (
+                          // --- ENHANCED AUDIO UI ---
+
+                          <div className="flex flex-col flex-1 w-full ">
+                            <audio
+                              src={fileUrl}
+                              controls
+                              className=" h-8 rounded-md"
+                              preload="metadata" // <- important
+                            >
+                              Your browser does not support the audio element.
+                            </audio>
+
+                            {/* <a
+                              href={fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download={fileName}
+                              className={`flex-shrink-0 p-2 rounded-full transition-colors ${
+                                isMine
+                                  ? "text-white hover:bg-blue-700"
+                                  : "text-gray-500 hover:bg-gray-100"
+                              }`}
+                              title="Download Audio File"
+                            >
+                              <DownloadIcon className="w-5 h-5" />
+                            </a> */}
+                          </div>
                         ) : (
-                          // For non-image files, display as a styled document link
                           <a
                             href={fileUrl}
                             target="_blank"
@@ -386,10 +427,10 @@ export default function MessageList({
                             />
                           </a>
                         )}
+                        {msg.Message && renderMessageText(msg.Message)}
                       </div>
                     )}
-                    {/* The message text is rendered here, ensuring it is on a new line below the file div */}
-                    {msg.Message && renderMessageText(msg.Message)}
+                    {!fileUrl && msg.Message && renderMessageText(msg.Message)}
                   </div>
 
                   {msg.Added_Time && (
@@ -442,11 +483,10 @@ export default function MessageList({
         })}
       </div>
 
-      {/* 🖼️ Full-Screen Image Modal (Lightbox) */}
       {fullScreenImage && (
         <div
           className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4"
-          onClick={() => setFullScreenImage(null)} // Close on background click
+          onClick={() => setFullScreenImage(null)}
         >
           <button
             className="absolute top-4 right-4 text-white hover:text-gray-300 p-2"
@@ -457,11 +497,9 @@ export default function MessageList({
           >
             <CloseIcon className="w-8 h-8" />
           </button>
-
           <img
             src={fullScreenImage}
             alt="Full-Screen Attachment"
-            // Prevent closing the modal when clicking the image itself
             onClick={(e) => e.stopPropagation()}
             className="max-w-full max-h-full object-contain shadow-2xl rounded-lg"
           />
