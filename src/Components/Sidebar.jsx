@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import ChannelModal from "./ChannelModal";
 import { fetchMessages, markHighlighted } from "../Store/MessageSlice";
+import { FiSearch } from "react-icons/fi";
 
 export default function Sidebar({
   onSelectPerson,
@@ -10,15 +11,20 @@ export default function Sidebar({
   allUsers,
   currentUser,
   onNotify,
+  setActiveChannel,
+  activeChannel,
 }) {
   const dispatch = useDispatch();
   const messages = useSelector((state) => state.messages.all);
 
   const [showModal, setShowModal] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [ikeObmUsers, setIkeObmUsers] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [channels, setChannels] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeConversations, setActiveConversations] = useState([]);
 
   // Fetch channels for current user
   useEffect(() => {
@@ -44,7 +50,22 @@ export default function Sidebar({
         setChannels(userChannels);
       })
       .catch(console.error);
-  }, [currentUser]);
+  }, [currentUser, activeChannel]);
+
+  useEffect(() => {
+    if (!activeChannel) return;
+    const stillExists = channels.some((chan) => chan.ID === activeChannel.ID);
+    if (!stillExists) {
+      if (channels.length > 0) {
+        const nextChannel = channels[0];
+        setActiveChannel(nextChannel);
+        onSelectChat(nextChannel);
+      } else {
+        setActiveChannel(null);
+        onSelectChat(null);
+      }
+    }
+  }, [channels, activeChannel, setActiveChannel, onSelectChat]);
 
   // Classify users
   useEffect(() => {
@@ -62,6 +83,35 @@ export default function Sidebar({
     );
     return () => clearInterval(interval);
   }, [currentUser, dispatch]);
+
+  // Users you’ve already messaged
+  useEffect(() => {
+    const messaged = allUsers.filter((user) =>
+      messages.some(
+        (msg) =>
+          !msg.ChannelName &&
+          ((msg.SentBy?.toLowerCase() === currentUser.toLowerCase() &&
+            msg.RecievedBy?.toLowerCase() === user.Email.toLowerCase()) ||
+            (msg.RecievedBy?.toLowerCase() === currentUser.toLowerCase() &&
+              msg.SentBy?.toLowerCase() === user.Email.toLowerCase()))
+      )
+    );
+
+    // Merge messaged users with manually added ones
+    setActiveConversations((prev) => {
+      const combined = [...prev];
+      messaged.forEach((u) => {
+        if (!combined.some((c) => c.Email === u.Email)) {
+          combined.push(u);
+        }
+      });
+      return combined;
+    });
+  }, [messages, allUsers, currentUser]);
+
+  const filteredUsers = activeConversations.filter((user) =>
+    user.Name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   // Compute unread highlights
   const unreadHighlights = {};
@@ -96,21 +146,19 @@ export default function Sidebar({
       }
     }
   });
+
   useEffect(() => {
     if (!currentUser || !myName) return;
-
     messages.forEach((msg) => {
       const needHighlight = String(msg.Need_Highlight).toLowerCase() === "true";
       const appNotif = String(msg.App_Notification).toLowerCase() === "true";
       const alreadyHighlighted =
         String(msg.Already_Highlighted).toLowerCase() === "true";
 
-      // Only notify if need highlight AND not already notified
       if (!needHighlight || appNotif || alreadyHighlighted) return;
 
       let shouldNotify = false;
 
-      // Channel messages
       if (msg.ChannelName && msg.RecievedByC) {
         const members = msg.RecievedByC.split(",").map((m) =>
           m.trim().toLowerCase()
@@ -118,7 +166,6 @@ export default function Sidebar({
         if (members.includes(myEmail)) shouldNotify = true;
       }
 
-      // Person-to-person messages
       if (!msg.ChannelName) {
         const isMine =
           msg.SentBy?.toLowerCase() === myEmail ||
@@ -127,7 +174,6 @@ export default function Sidebar({
       }
 
       if (shouldNotify) {
-        // Trigger in-app notification (replace with your UI notification)
         console.log("App Notification:", msg.Message);
         if (typeof onNotify === "function") {
           const targetId =
@@ -135,11 +181,11 @@ export default function Sidebar({
             (msg.SentBy?.toLowerCase() === myEmail
               ? msg.RecievedBy
               : msg.SentBy);
-          const senderName = msg.SentByName || msg.SentBy; // fallback
+          const senderName = msg.SentByName || msg.SentBy;
           const messageText = msg.Message || "";
           onNotify(targetId, senderName, messageText);
         }
-        // Update App_Notification so it does not notify again
+
         const reportName = msg.ChannelName
           ? "ChannelsHiddenForm_Report"
           : "PersonToPersonHiddenForm_Report";
@@ -181,6 +227,11 @@ export default function Sidebar({
     onSelectPerson(person);
     setSidebarOpen(false);
 
+    // Add to conversation list if not already there
+    if (!activeConversations.some((u) => u.Email === person.Email)) {
+      setActiveConversations((prev) => [person, ...prev]);
+    }
+
     messages
       .filter(
         (msg) =>
@@ -199,15 +250,62 @@ export default function Sidebar({
 
   return (
     <>
+      {/* Channel Modal */}
       {showModal && (
         <ChannelModal
           onClose={() => setShowModal(false)}
           onChannelCreated={(newChannel) => {
             setChannels((prev) => [newChannel, ...prev]);
+            setActiveChannel(newChannel);
             setShowModal(false);
             onSelectChat(newChannel);
           }}
         />
+      )}
+
+      {/* New Conversation Modal */}
+      {showSearchModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5 relative">
+            <button
+              onClick={() => setShowSearchModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              ✖
+            </button>
+            <h3 className="font-bold text-xl mb-4 text-gray-800">
+              Start New Conversation
+            </h3>
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="max-h-60 overflow-y-auto">
+              {allUsers
+                .filter(
+                  (u) =>
+                    !activeConversations.some((c) => c.Email === u.Email) &&
+                    u.Email.toLowerCase() !== currentUser.toLowerCase() &&
+                    u.Name.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map((user) => (
+                  <div
+                    key={user.ID}
+                    onClick={() => {
+                      handlePersonClick(user);
+                      setShowSearchModal(false);
+                    }}
+                    className="cursor-pointer px-3 py-2 hover:bg-gray-100 rounded flex items-center"
+                  >
+                    {user.Name}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Hamburger button */}
@@ -233,6 +331,7 @@ export default function Sidebar({
         }`}
       >
         <div className="p-4 flex-1 overflow-y-auto">
+          {/* Channels */}
           <div className="mb-5">
             <div className="flex items-center justify-between mb-2 ml-1">
               <h3 className="text-base font-semibold text-gray-200">
@@ -270,12 +369,23 @@ export default function Sidebar({
             )}
           </div>
 
+          {/* Conversations */}
           <div className="mb-5">
-            <h3 className="text-base font-semibold mb-2 text-gray-200">
-              IKE / OBM
-            </h3>
-            {ikeObmUsers.length ? (
-              ikeObmUsers.map((user) => {
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-base font-semibold mb-2 text-gray-200">
+                Conversation
+              </h3>
+              <button
+                onClick={() => setShowSearchModal(true)}
+                className="text-gray-400 hover:text-white p-1 rounded"
+                title="New Conversation"
+              >
+                <FiSearch />
+              </button>
+            </div>
+
+            {filteredUsers.length ? (
+              filteredUsers.map((user) => {
                 const hasHighlight = unreadHighlights[user.Email];
                 return (
                   <div
@@ -295,36 +405,9 @@ export default function Sidebar({
                 );
               })
             ) : (
-              <p className="text-gray-400 text-xs">No IKE / OBM users found</p>
-            )}
-          </div>
-
-          <div className="mb-2">
-            <h3 className="text-sm font-semibold text-gray-200 mb-1">
-              Technicians
-            </h3>
-            {technicians.length ? (
-              technicians.map((tech) => {
-                const hasHighlight = unreadHighlights[tech.Email];
-                return (
-                  <div
-                    key={tech.ID}
-                    onClick={() => handlePersonClick(tech)}
-                    className={`cursor-pointer px-2 py-1 rounded flex justify-between items-center ${
-                      hasHighlight
-                        ? "bg-yellow-500/20 hover:bg-yellow-500/30"
-                        : "hover:bg-[#404249]"
-                    }`}
-                  >
-                    <span>@{tech.Name}</span>
-                    {hasHighlight && (
-                      <span className="ml-2 w-2 h-2 bg-yellow-400 rounded-full"></span>
-                    )}
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-gray-400 text-xs">No Technicians found</p>
+              <p className="text-gray-400 text-xs">
+                {searchTerm ? "No matching users" : "No conversations yet"}
+              </p>
             )}
           </div>
         </div>

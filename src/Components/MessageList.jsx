@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+// Import DOMPurify for critical client-side HTML sanitization
+// NOTE: You must install this library: npm install dompurify
+import DOMPurify from "dompurify";
 
 // --- Icon Placeholders ---
 const DownloadIcon = ({ className = "" }) => (
@@ -52,29 +55,30 @@ const DocumentIcon = ({ className = "" }) => (
   </svg>
 );
 
-const MicrophoneIcon = ({ className = "" }) => (
-  <svg
-    className={`w-6 h-6 ${className}`}
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M19 11a7 7 0 01-7 7v1h2v-1a5 5 0 005-5h-2z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M12 18V20m0-8V2h2v10h-2z"
-    />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
+// NOTE: MicrophoneIcon is unused in this component but kept for completeness
+// const MicrophoneIcon = ({ className = "" }) => (
+//   <svg
+//     className={`w-6 h-6 ${className}`}
+//     fill="none"
+//     stroke="currentColor"
+//     viewBox="0 0 24 24"
+//     xmlns="http://www.w3.org/2000/svg"
+//   >
+//     <path
+//       strokeLinecap="round"
+//       strokeLinejoin="round"
+//       strokeWidth={2}
+//       d="M19 11a7 7 0 01-7 7v1h2v-1a5 5 0 005-5h-2z"
+//     />
+//     <path
+//       strokeLinecap="round"
+//       strokeLinejoin="round"
+//       strokeWidth={2}
+//       d="M12 18V20m0-8V2h2v10h-2z"
+//     />
+//     <circle cx="12" cy="7" r="4" />
+//   </svg>
+// );
 
 export default function MessageList({
   messages,
@@ -152,37 +156,49 @@ export default function MessageList({
     const timeB = b.Added_Time ? new Date(b.Added_Time).getTime() : 0;
     return timeA - timeB;
   });
-
+  const decodeDelugeChars = (text) => {
+    if (!text) return text;
+    return text.replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex) =>
+      String.fromCodePoint(parseInt(hex, 16))
+    );
+  };
+  // 1. REVISED FUNCTION: Now handles HTML safely.
+  // It uses DOMPurify to sanitize the content, removing risky tags
+  // before injecting the HTML into the DOM.
   const renderMessageText = (text) => {
-    if (!text) return "";
-    const mentionRegex = /@(\w+)/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-    while ((match = mentionRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index));
-      }
-      const mention = match[1];
-      parts.push(
-        <span
-          key={`${mention}-${match.index}`}
-          style={{
-            color: "#00000",
-            fontWeight: 600,
-            padding: "0 2px",
-            borderRadius: "4px",
-          }}
-        >
-          @{mention}
-        </span>
-      );
-      lastIndex = match.index + match[0].length;
-    }
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
-    }
-    return parts;
+    if (!text) return null;
+
+    // Decode Deluge Unicode to actual emoji first
+    const decodedText = decodeDelugeChars(text);
+
+    // Sanitize HTML
+    const cleanHtml = DOMPurify.sanitize(decodedText, {
+      ALLOWED_TAGS: [
+        "b",
+        "i",
+        "u",
+        "em",
+        "strong",
+        "a",
+        "p",
+        "div",
+        "ul",
+        "ol",
+        "li",
+        "pre",
+        "code",
+        "blockquote",
+        "span",
+      ],
+      ALLOWED_ATTR: ["href", "target", "class", "style", "data-mention"],
+    });
+
+    return (
+      <div
+        className="break-words text-left"
+        dangerouslySetInnerHTML={{ __html: cleanHtml }}
+      />
+    );
   };
 
   const isImageFile = (fileName) => {
@@ -241,10 +257,11 @@ export default function MessageList({
               title={msg.Message}
               onClick={() => scrollToMessage(msg.ID)}
             >
-              <div className="font-medium">
+              {/* 2. JSX Update for Pinned Messages */}
+              <div className="font-medium flex-1 truncate">
                 {renderMessageText(msg.Message)}
               </div>
-              <div className="flex space-x-2">
+              <div className="flex space-x-2 flex-shrink-0">
                 <button
                   className="text-blue-600 text-sm underline"
                   onClick={(e) => {
@@ -369,7 +386,6 @@ export default function MessageList({
                           </button>
                         ) : isAudio ? (
                           // --- ENHANCED AUDIO UI ---
-
                           <div className="flex flex-col flex-1 w-full ">
                             <audio
                               src={fileUrl}
@@ -379,21 +395,6 @@ export default function MessageList({
                             >
                               Your browser does not support the audio element.
                             </audio>
-
-                            {/* <a
-                              href={fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              download={fileName}
-                              className={`flex-shrink-0 p-2 rounded-full transition-colors ${
-                                isMine
-                                  ? "text-white hover:bg-blue-700"
-                                  : "text-gray-500 hover:bg-gray-100"
-                              }`}
-                              title="Download Audio File"
-                            >
-                              <DownloadIcon className="w-5 h-5" />
-                            </a> */}
                           </div>
                         ) : (
                           <a
@@ -427,9 +428,12 @@ export default function MessageList({
                             />
                           </a>
                         )}
+                        {/* 3. CONDITIONAL RENDERING UPDATE: Render message text if file is present (e.g., image caption) */}
                         {msg.Message && renderMessageText(msg.Message)}
                       </div>
                     )}
+
+                    {/* 4. CONDITIONAL RENDERING UPDATE: Render message text if NO file is present */}
                     {!fileUrl && msg.Message && renderMessageText(msg.Message)}
                   </div>
 

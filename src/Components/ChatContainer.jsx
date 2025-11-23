@@ -5,12 +5,12 @@ import { addMessage, updateMessage } from "../Store/MessageSlice";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
-
 export default function ChatContainer({
   activeChannel,
   activePerson,
   allUsers,
   currentUser,
+  setActiveChannel,
 }) {
   const dispatch = useDispatch();
   const allMessages = useSelector((state) => state.messages.all);
@@ -171,7 +171,6 @@ export default function ChatContainer({
         };
 
     // Add record to Zoho
-    console.log(payload);
     console.log("file : ", file);
     ZOHO.CREATOR.DATA.addRecords({
       app_name: "admiral-field-portal",
@@ -191,7 +190,7 @@ export default function ChatContainer({
         file: file,
       };
       console.log(config1);
-      if (recordId) {
+      if (recordId && file) {
         ZOHO.CREATOR.FILE.uploadFile(config1).then(function (response) {
           console.log("File uploaded:", response);
         });
@@ -201,7 +200,6 @@ export default function ChatContainer({
       setLocalMessages((prev) => prev.filter((m) => m.ID !== tempId));
     });
   };
-
   if (!activeChannel && !activePerson) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400">
@@ -226,6 +224,57 @@ export default function ChatContainer({
       msg.RecievedBy?.toLowerCase().includes(lower)
     );
   });
+  const handleAddMember = async (emails, action = "add") => {
+    console.log("Handling emails:", emails, "Action:", action);
+
+    if (!emails || emails.length === 0) return;
+
+    // Normalize input
+    const emailsArray = emails
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (emailsArray.length === 0) return;
+
+    const currentEmail = currentUser.toLowerCase(); // optional: exclude self if needed
+
+    // Existing members
+    const existingMembers = activeChannel.RecievedByC
+      ? activeChannel.RecievedByC.split(",").map((e) => e.trim().toLowerCase())
+      : [];
+
+    let updatedMembers = [];
+
+    if (action === "add") {
+      // Add emails
+      updatedMembers = [...new Set([...existingMembers, ...emailsArray])];
+    } else if (action === "remove") {
+      // Remove emails
+      updatedMembers = existingMembers.filter((e) => !emailsArray.includes(e));
+    }
+
+    const memberString = updatedMembers.join(",");
+
+    const payload = {
+      app_name: "admiral-field-portal",
+      report_name: "ChannelsHiddenForm_Report",
+      id: activeChannel.ID,
+      payload: { data: { RecievedByC: memberString } },
+    };
+
+    console.log("Payload to Zoho:", payload);
+
+    ZOHO.CREATOR.DATA.updateRecordById(payload).then(() => {
+      // Update state immediately
+      setActiveChannel((prev) => ({ ...prev, RecievedByC: memberString }));
+
+      if (action === "add") {
+        alert("Member(s) added successfully!");
+      } else if (action === "remove") {
+        alert("You left the channel.");
+      }
+    });
+  };
 
   return (
     <div className="flex flex-col flex-1 bg-gray-50">
@@ -243,6 +292,10 @@ export default function ChatContainer({
         title={chatTitle}
         members={activeChannel?.RecievedByC || activePerson.Email}
         allUsers={allUsers}
+        onAddMember={handleAddMember}
+        currentUser={currentUser}
+        setActiveChannel={setActiveChannel}
+        isChannel={!!activeChannel}
       />
       <MessageList
         messages={filteredMessages}

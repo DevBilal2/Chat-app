@@ -108,6 +108,7 @@ export default function App() {
         messages={chatMessages}
         notifications={notifications} // Pass notifications to sidebar
         activeChannel={activeChannel}
+        setActiveChannel={setActiveChannel}
         activePerson={activePerson}
         onSelectPerson={handleSelectPerson}
         onSelectChat={handleSelectChannel}
@@ -122,6 +123,7 @@ export default function App() {
         activeChannel={activeChannel}
         activePerson={activePerson}
         onMessagesUpdate={setChatMessages}
+        setActiveChannel={setActiveChannel}
         // Pass notification handler
       />
     </div>

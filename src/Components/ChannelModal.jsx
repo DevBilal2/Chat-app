@@ -67,7 +67,11 @@ export default function ChannelModal({
         console.log("✅ Channel created:", res);
         if (res.code === 3000) {
           alert("Channel created successfully!");
-          onChannelCreated?.({ ID: randomId, ChannelName: channelName });
+          onChannelCreated?.({
+            ID: randomId,
+            ChannelName: channelName,
+            RecievedByC: finalMembers.join(","),
+          });
           onSelectChat?.(`#${channelName}`);
           onClose();
         } else {
