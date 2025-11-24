@@ -4,6 +4,23 @@ import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 
 // --- Icon Placeholders ---
+const PinIcon = ({ className = "", isSolid = true }) => (
+  <svg
+    className={`w-4 h-4 ${className}`}
+    viewBox="0 0 24 24"
+    fill={isSolid ? "currentColor" : "none"}
+    stroke={isSolid ? "none" : "currentColor"}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M10.151 5.448l2.977-2.977a1 1 0 011.414 0l1.838 1.838a1 1 0 010 1.414L15.3 7.828l3.657 3.657-3.12 3.12a2.5 2.5 0 01-3.536 0l-3.657-3.657-1.767 1.768a1 1 0 01-1.414 0l-1.838-1.838a1 1 0 010-1.414l2.977-2.977zm-3.89 3.89l1.767-1.767 3.657 3.657a.5.5 0 00.707 0l3.12-3.12.354.353a.5.5 0 000 .707l-3.657 3.657a2.5 2.5 0 01-3.536 0l-1.838-1.838a.5.5 0 00-.707 0l-.353.354zM9.5 22h5c.276 0 .5-.224.5-.5V17a.5.5 0 00-.5-.5h-5a.5.5 0 00-.5.5v4.5c0 .276.224.5.5.5z"
+      fillRule="evenodd"
+    />
+  </svg>
+);
 const DownloadIcon = ({ className = "" }) => (
   <svg
     className={`w-4 h-4 ${className}`}
@@ -91,6 +108,12 @@ export default function MessageList({
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const [fullScreenImage, setFullScreenImage] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState({
+    top: 0,
+    left: 0,
+    isMine: false,
+  });
+  // -------------------------
 
   const dropdownRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -113,16 +136,28 @@ export default function MessageList({
     }
   };
 
-  const toggleDropdown = (msgId) => {
-    setOpenDropdownId(openDropdownId === msgId ? null : msgId);
+  const toggleDropdown = (msgId, event, isMine) => {
+    if (openDropdownId === msgId) {
+      setOpenDropdownId(null);
+      setDropdownPosition({ top: 0, left: 0, isMine: false });
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 5, // 5px below the button
+        left: isMine ? rect.right : rect.left, // Use left/right for positioning based on side
+        isMine: isMine,
+      });
+      setOpenDropdownId(msgId);
+    }
   };
 
   const handleImageClick = (url) => {
     setFullScreenImage(url);
   };
-
-  const dropdownClasses =
-    "absolute left-0 top-full mt-1 w-28 bg-white border border-gray-200 rounded shadow-md z-20 text-sm";
+  const dropdownClassesMine =
+    "absolute mt-1 w-28 bg-white border border-gray-200 rounded shadow-md z-500 text-sm";
+  const dropdownClassesOther =
+    "absolute mt-1 w-28 bg-white border border-gray-200 rounded shadow-md z-500 text-sm";
   const dropdownButtonClasses =
     "block w-full text-left px-3 py-1 hover:bg-gray-100 transition-colors duration-150";
 
@@ -168,8 +203,16 @@ export default function MessageList({
   const renderMessageText = (text) => {
     if (!text) return null;
 
-    // Decode Deluge Unicode to actual emoji first
-    const decodedText = decodeDelugeChars(text);
+    var decodedText = decodeDelugeChars(text);
+    // const mentionRegex = /@([a-zA-Z0-9_\s-]+)(?=\s|[,.?!:;]|$)/g;
+    // decodedText = decodedText.replace(
+    //   mentionRegex,
+    //   `<span data-mention="true" class="message-mention">@$1</span>`
+    // );
+    // decodedText = decodedText.replace(
+    //   /@(\S+)/g,
+    //   `<span data-mention="true" class="message-mention">@$1</span>`
+    // );
 
     // Sanitize HTML
     const cleanHtml = DOMPurify.sanitize(decodedText, {
@@ -190,7 +233,7 @@ export default function MessageList({
         "blockquote",
         "span",
       ],
-      ALLOWED_ATTR: ["href", "target", "class", "style", "data-mention"],
+      ALLOWED_ATTR: ["href", "target", "class", "style", "data-mention-list"],
     });
 
     return (
@@ -257,19 +300,28 @@ export default function MessageList({
               title={msg.Message}
               onClick={() => scrollToMessage(msg.ID)}
             >
-              {/* 2. JSX Update for Pinned Messages */}
-              <div className="font-medium flex-1 truncate">
-                {renderMessageText(msg.Message)}
+              {/* START CHANGE */}
+              <div className="font-medium flex-1 flex items-center min-w-0">
+                {/* Sender Name with light styling */}
+                <span className="text-xs font-semibold text-gray-600 mr-2 flex-shrink-0">
+                  {getSenderName(msg.SentBy)}:
+                </span>
+                {/* Message Content */}
+                <div className="truncate min-w-0">
+                  {renderMessageText(msg.Message)}
+                </div>
               </div>
+              {/* END CHANGE */}
               <div className="flex space-x-2 flex-shrink-0">
                 <button
-                  className="text-blue-600 text-sm underline"
+                  className="text-gray-500 hover:text-gray-700 transition-colors duration-150 flex items-center justify-center p-1"
                   onClick={(e) => {
                     e.stopPropagation();
                     onPinToggle(msg);
                   }}
+                  title="Unpin Message"
                 >
-                  Unpin
+                  <PinIcon className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -307,13 +359,20 @@ export default function MessageList({
                       className="px-1 text-sm font-bold"
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleDropdown(msg.ID);
+                        // --- UPDATED CALL ---
+                        toggleDropdown(msg.ID, e, true);
+                        // --------------------
                       }}
                     >
                       ⋮
                     </button>
-                    {openDropdownId === msg.ID && (
-                      <div className={dropdownClasses} ref={dropdownRef}>
+                    {/* {openDropdownId === msg.ID && (
+                      <div
+                        className={
+                          isMine ? dropdownClassesMine : dropdownClassesOther
+                        }
+                        ref={dropdownRef}
+                      >
                         <button
                           className={dropdownButtonClasses}
                           onClick={(e) => {
@@ -335,14 +394,14 @@ export default function MessageList({
                           Delete
                         </button>
                       </div>
-                    )}
+                    )} */}
                   </div>
                 )}
 
                 <div
                   className={`relative max-w-xs px-3 py-0.5 rounded-lg shadow ${
                     isMine
-                      ? "bg-blue-500 text-white rounded-br-none text-right"
+                      ? "bg-[#5F9EA0] text-white rounded-br-none text-right"
                       : "bg-gray-200 text-gray-800 rounded-bl-none text-left"
                   }`}
                 >
@@ -404,7 +463,7 @@ export default function MessageList({
                             download={fileName}
                             className={`flex items-center space-x-3 p-3 rounded-lg border-2 ${
                               isMine
-                                ? "bg-blue-600 text-white border-blue-700 hover:bg-blue-700"
+                                ? "bg-[#5F9EA0] text-white border-[#5F9EA0] hover:[#5F9EA9]"
                                 : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
                             } transition-colors duration-150 cursor-pointer w-full`}
                           >
@@ -449,14 +508,19 @@ export default function MessageList({
                     <button
                       className="px-1 text-sm font-bold"
                       onClick={(e) => {
-                        e.stopPropagation();
-                        toggleDropdown(msg.ID);
+                        e.stopPropagation(); // --- INCORRECT: Should be `isMine` (which is false here) ---
+                        toggleDropdown(msg.ID, e, isMine); // <--- CHANGE THIS // --------------------
                       }}
                     >
                       ⋮
                     </button>
                     {openDropdownId === msg.ID && (
-                      <div className={dropdownClasses} ref={dropdownRef}>
+                      <div
+                        className={
+                          isMine ? dropdownClassesMine : dropdownClassesOther
+                        }
+                        ref={dropdownRef}
+                      >
                         <button
                           className={dropdownButtonClasses}
                           onClick={(e) => {
@@ -486,7 +550,52 @@ export default function MessageList({
           );
         })}
       </div>
-
+      {openDropdownId && (
+        <div
+          className={`fixed ${
+            // *** Change 'absolute' to 'fixed' here ***
+            // Using the existing classes for background/shadow
+            dropdownPosition.isMine
+              ? "bg-white border text-sm"
+              : "bg-white border text-sm"
+          } w-28 rounded shadow-md z-[500]`} // <- Consolidate necessary Tailwind classes
+          ref={dropdownRef}
+          style={{
+            top: `${dropdownPosition.top}px`, // If 'isMine' (right side), align the right edge of the dropdown with the right coordinate of the button.
+            right: dropdownPosition.isMine
+              ? `${window.innerWidth - dropdownPosition.left}px`
+              : "auto", // If 'isMine' is false (left side), align the left edge of the dropdown with the left coordinate of the button.
+            left: dropdownPosition.isMine
+              ? "auto"
+              : `${dropdownPosition.left}px`,
+          }}
+        >
+          <button
+            className={dropdownButtonClasses}
+            onClick={(e) => {
+              e.stopPropagation();
+              const msg = sortedMessages.find((m) => m.ID === openDropdownId);
+              if (msg) onPinToggle(msg);
+              setOpenDropdownId(null);
+            }}
+          >
+            {messages.find((m) => m.ID === openDropdownId)?.Pin
+              ? "Unpin"
+              : "Pin"}
+          </button>
+          <button
+            className={`${dropdownButtonClasses} text-red-500`}
+            onClick={(e) => {
+              e.stopPropagation();
+              const msg = sortedMessages.find((m) => m.ID === openDropdownId);
+              if (msg) onDeleteMessage(msg);
+              setOpenDropdownId(null);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
       {fullScreenImage && (
         <div
           className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4"

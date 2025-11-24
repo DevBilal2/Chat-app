@@ -118,7 +118,7 @@ export default function ChatHeader({
           {/* Add Member */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="p-1.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors shadow-sm flex items-center justify-center"
+            className="p-1.5 rounded-full bg-[#001c57] text-white hover:bg-blue-600 transition-colors shadow-sm flex items-center justify-center"
             title="Add Member"
           >
             <FiUserPlus className="w-4 h-4" />

@@ -19,8 +19,6 @@ export default function Sidebar({
 
   const [showModal, setShowModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
-  const [ikeObmUsers, setIkeObmUsers] = useState([]);
-  const [technicians, setTechnicians] = useState([]);
   const [channels, setChannels] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -68,10 +66,6 @@ export default function Sidebar({
   }, [channels, activeChannel, setActiveChannel, onSelectChat]);
 
   // Classify users
-  useEffect(() => {
-    setIkeObmUsers(allUsers.filter((u) => u.Role === "IKE Admin"));
-    setTechnicians(allUsers.filter((u) => u.Role === "Field Technician"));
-  }, [allUsers]);
 
   // Poll messages every 5 seconds
   useEffect(() => {
@@ -158,31 +152,48 @@ export default function Sidebar({
       if (!needHighlight || appNotif || alreadyHighlighted) return;
 
       let shouldNotify = false;
+      const messageText = (msg.Message || "").toLowerCase(); // Define messageText here
 
       if (msg.ChannelName && msg.RecievedByC) {
-        const members = msg.RecievedByC.split(",").map((m) =>
-          m.trim().toLowerCase()
-        );
-        if (members.includes(myEmail)) shouldNotify = true;
+        // 🛑 MODIFICATION HERE: Only notify if they are mentioned (@myName)
+        if (messageText.includes(`@${myName}`)) {
+          shouldNotify = true;
+        }
       }
 
       if (!msg.ChannelName) {
-        const isMine =
-          msg.SentBy?.toLowerCase() === myEmail ||
-          msg.RecievedBy?.toLowerCase() === myEmail;
-        if (isMine) shouldNotify = true;
+        // Notification for Direct Messages (DM)
+        const isRecipient = msg.RecievedBy?.toLowerCase() === myEmail;
+        if (isRecipient) shouldNotify = true;
       }
 
       if (shouldNotify) {
         console.log("App Notification:", msg.Message);
+
         if (typeof onNotify === "function") {
+          // 1️⃣ Determine if message is channel or direct
           const targetId =
             msg.ChannelName ||
             (msg.SentBy?.toLowerCase() === myEmail
               ? msg.RecievedBy
               : msg.SentBy);
-          const senderName = msg.SentByName || msg.SentBy;
+
+          // 2️⃣ Get email of actual sender (not you)
+          const senderEmail =
+            msg.SentBy?.toLowerCase() === myEmail
+              ? msg.RecievedBy?.toLowerCase()
+              : msg.SentBy?.toLowerCase();
+
+          // 3️⃣ Find sender name from allUsers
+          const userData = allUsers.find(
+            (u) => u.Email?.toLowerCase() === senderEmail
+          );
+
+          // 4️⃣ Use full name → fallback to email if not found
+          const senderName = userData?.Name || senderEmail || "You";
+
           const messageText = msg.Message || "";
+
           onNotify(targetId, senderName, messageText);
         }
 
@@ -326,7 +337,7 @@ export default function Sidebar({
 
       {/* Sidebar */}
       <div
-        className={`fixed sm:relative z-50 top-0 left-0 h-full w-56 bg-[#23272a] text-white flex flex-col overflow-hidden transform transition-transform duration-200 ${
+        className={`fixed sm:relative z-50 top-0 left-0 h-full w-56 bg-[#001C57] text-white flex flex-col overflow-hidden transform transition-transform duration-200 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full sm:translate-x-0"
         }`}
       >
@@ -339,7 +350,7 @@ export default function Sidebar({
               </h3>
               <button
                 onClick={() => setShowModal(true)}
-                className="text-lg px-2 bg-[#2c2f33] hover:bg-[#404249] rounded transition"
+                className="text-lg text-[#FFd700] px-2 hover:bg-[#404249] rounded transition"
               >
                 +
               </button>
@@ -377,7 +388,7 @@ export default function Sidebar({
               </h3>
               <button
                 onClick={() => setShowSearchModal(true)}
-                className="text-gray-400 hover:text-white p-1 rounded"
+                className="text-[#FFd700] hover:text-white p-1 rounded"
                 title="New Conversation"
               >
                 <FiSearch />

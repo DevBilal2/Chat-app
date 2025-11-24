@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import { useDispatch } from "react-redux";
+import { fetchMessages } from "../Store/MessageSlice";
 import {
   FiPaperclip,
   FiSend,
@@ -7,15 +9,14 @@ import {
   FiMic,
   FiSquare,
   FiTrash2,
-  FiBold, // New: for Bold button
-  FiItalic, // New: for Italic button
-  FiLink, // New: for Link button
-  FiList, // New: for Unordered List
-  FiType, // New: for Blockquote
-  FiCode, // New: for Code
-  FiSmile, // New: for Emoji Picker
+  FiBold,
+  FiItalic,
+  FiLink,
+  FiList,
+  FiType,
+  FiCode,
+  FiSmile,
 } from "react-icons/fi";
-// Removed: import { Editor } from "@tinymce/tinymce-react";
 
 // Simple list of emojis for a basic picker
 const EMOJIS = [
@@ -35,8 +36,29 @@ const EMOJIS = [
   "💡",
   "🚀",
 ];
-
-export default function MessageInput({ onSend, members }) {
+const Loader = () => (
+  <svg
+    className="animate-spin h-5 w-5 text-white"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+  >
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+    ></circle>
+    <path
+      className="opacity-75"
+      fill="currentColor"
+      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    ></path>
+  </svg>
+);
+export default function MessageInput({ onSend, members, currentUser }) {
   const editorRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -49,14 +71,15 @@ export default function MessageInput({ onSend, members }) {
   const [currentText, setCurrentText] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [attachedFile, setAttachedFile] = useState(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false); // New state
-
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   // Voice states
   const [isRecording, setIsRecording] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioURL, setAudioURL] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
+  const dispatch = useDispatch();
 
   // Timer for recording
   useEffect(() => {
@@ -86,6 +109,7 @@ export default function MessageInput({ onSend, members }) {
       ))}
     </div>
   );
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -96,10 +120,9 @@ export default function MessageInput({ onSend, members }) {
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
   const emojiToDeluge = (emoji) => {
     const codePoint = emoji.codePointAt(0).toString(16);
     return `\\u{${codePoint}}`;
@@ -124,21 +147,12 @@ export default function MessageInput({ onSend, members }) {
     if (!plain) return "";
 
     const escapeHtml = (str) =>
-      str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); // --- 🚀 FIX: New regex to capture @ followed by multiple word characters and spaces --- // It looks for @ followed by at least one word character, optionally followed by (space + one or more word characters). // This handles names like "@John Doe" while stopping at punctuation or a double space.
 
-    // NEW ROBUST REGEX for repeated single-word mentions:
-    // 1. (\s|^) : Leading space or start of line (Group 1: leadingSpace).
-    // 2. (@\S+) : Matches '@' followed by one or more NON-WHITESPACE characters (the name) (Group 2: namePart).
-    // The global flag (g) ensures ALL matches are processed.
-    const mentionRegex = /(\s|^)(@\S+)/g;
+    const mentionRegex = /(\s|^)(@[\w]+(?:\s[\w]+)*)/g;
 
     return plain.replace(mentionRegex, (match, leadingSpace, namePart) => {
-      // 1. Highlight only the captured 'namePart' (e.g., "@John")
-      const escapedMention = escapeHtml(namePart);
-
-      // 2. Return the leading space + the highlighted span + an unhighlighted space (important for separation)
-      // Note: The extra space is technically handled by the text that follows the match,
-      // but ensuring a consistent output helps. We'll rely on the space inserted by selectSuggestion.
+      const escapedMention = escapeHtml(namePart.trim());
 
       return `${leadingSpace}<span data-mention class="inline-block px-1 rounded text-blue-700 font-semibold">${escapedMention}</span>`;
     });
@@ -161,6 +175,11 @@ export default function MessageInput({ onSend, members }) {
       setShowSuggestions(filtered.length > 0);
       setSelectedIndex(0);
     } else {
+      // --- 🔥 FIX 1: Explicitly clean up DOM when mention is inactive ---
+      if (tagStartIndex !== -1) {
+        el.innerHTML = plain; // Replaces current HTML with pure plain text
+        moveCaretToEnd(el); // Restore caret position after cleanup
+      } // -----------------------------------------------------------------
       setTagStartIndex(-1);
       setShowSuggestions(false);
     }
@@ -170,41 +189,26 @@ export default function MessageInput({ onSend, members }) {
     const el = editorRef.current;
     if (!el || tagStartIndex === -1) return;
 
-    const plain = currentText;
+    const plain = currentText; // --- 🚀 FIX: Use the member's full name (including space) ---
 
-    // --- FIX APPLIED HERE ---
-    // 1. Get the member's full name.
     const fullName = member.Name || "";
+    const mention = `@${fullName}`; // E.g., "@John Doe" // ------------------------ // 1. Determine the query part to replace (everything from @ to the next space or line break)
+    const queryPart = plain.substring(tagStartIndex + 1).split(/[\s\n]/)[0]; // 2. Calculate the end index of the text being replaced in the original plain text
 
-    // 2. Find the index of the first space.
-    const firstSpaceIndex = fullName.indexOf(" ");
+    const replaceEndIndex = tagStartIndex + 1 + queryPart.length; // 3. Get the text that comes *before* the '@' symbol.
 
-    // 3. Truncate the name: If a space is found, use only the text before it. Otherwise, use the full name.
-    const firstName =
-      firstSpaceIndex !== -1
-        ? fullName.substring(0, firstSpaceIndex)
-        : fullName;
+    const textBefore = plain.substring(0, tagStartIndex); // 4. Get the preserved text *after* the query that was replaced.
+    const textAfter = plain.substring(replaceEndIndex).trimStart(); // 5. Construct the new content: Text before + full mention + space + text after
+    const newPlain = textBefore + mention + " " + textAfter; // Re-render the editor content
 
-    const mention = `@${firstName}`; // E.g., "@John" (dropping "Doe")
-    // ------------------------
+    el.innerHTML = renderWithMentionsHtml(newPlain); // Update the state and hide suggestions
 
-    const textBefore = plain.substring(0, tagStartIndex);
-
-    // Construct the new plain text with only the first word + a trailing space
-    const newPlain = textBefore + mention + " ";
-
-    // Re-render the editor content
-    el.innerHTML = renderWithMentionsHtml(newPlain);
-
-    // Update the state and hide suggestions
     setCurrentText(newPlain);
     setShowSuggestions(false);
-    setTagStartIndex(-1);
+    setTagStartIndex(-1); // Move caret to the end
 
-    // Move caret to the end
     moveCaretToEnd(el);
   };
-
   const handleFileChange = (e) => {
     setAttachedFile(e.target.files[0]);
     e.target.value = null;
@@ -239,8 +243,9 @@ export default function MessageInput({ onSend, members }) {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      const tracks = mediaRecorderRef.current.stream.getTracks();
-      tracks.forEach((track) => track.stop());
+      mediaRecorderRef.current.stream
+        .getTracks()
+        .forEach((track) => track.stop());
     }
   };
 
@@ -254,31 +259,40 @@ export default function MessageInput({ onSend, members }) {
 
   const sendAudio = () => {
     if (!audioBlob) return;
+    setIsSending(true); // Start loader
     const audioFile = new File([audioBlob], "voice-message.webm", {
       type: "audio/webm",
     });
-    onSend({ text: "", file: audioFile });
+    onSend({ text: "", file: audioFile, callback: () => setIsSending(false) });
     resetVoiceState();
   };
 
   const handleSend = () => {
-    if (isPreview) return sendAudio();
+    const plainText = editorRef.current.innerText.trim();
+    const htmlText = editorRef.current.innerHTML.trim();
+    const file = attachedFile;
+    const audio = audioBlob;
 
-    let textHtml = editorRef.current?.innerHTML?.trim() || "";
-    let plainText = editorRef.current?.innerText?.trim() || "";
+    if (!plainText && !file && !audio) return;
 
-    if (!plainText && !attachedFile) return;
-
-    // Convert all emojis in plainText to Deluge Unicode
-    const delugeText = plainText.replace(/([\p{Emoji}])/gu, (match) =>
+    if (audioBlob && isPreview) return sendAudio();
+    setIsSending(true);
+    const delugeText = htmlText.replace(/([\p{Emoji}])/gu, (match) =>
       emojiToDeluge(match)
     );
 
-    onSend({ text: delugeText, file: attachedFile || null });
+    onSend({
+      text: delugeText,
+      file,
+      callback: () => {
+        setTimeout(() => dispatch(fetchMessages(currentUser)), 300);
+        setIsSending(false);
+      },
+    });
 
     editorRef.current.innerHTML = "";
-    setCurrentText("");
     setAttachedFile(null);
+    setCurrentText("");
     setShowSuggestions(false);
     setTagStartIndex(-1);
   };
@@ -316,22 +330,16 @@ export default function MessageInput({ onSend, members }) {
   const isInputEmpty =
     !attachedFile && !audioBlob && (!currentText || currentText.trim() === "");
 
-  // NEW: Rich Text Command Handler
   const executeCommand = (command, value = null) => {
     document.execCommand(command, false, value);
     editorRef.current.focus();
   };
 
-  // NEW: Emoji Insertion
   const insertEmoji = (emoji) => {
-    // Insert the emoji at the current caret position
     executeCommand("insertText", emoji);
     setShowEmojiPicker(false);
   };
 
-  /**
-   * Toolbar Button Component
-   */
   const ToolbarButton = ({ icon: Icon, title, command, value }) => (
     <button
       onMouseDown={(e) => {
@@ -411,12 +419,7 @@ export default function MessageInput({ onSend, members }) {
           <div className="flex items-center space-x-1 p-1 bg-gray-50 border-b border-gray-200">
             <ToolbarButton icon={FiBold} title="Bold" command="bold" />
             <ToolbarButton icon={FiItalic} title="Italic" command="italic" />
-            <ToolbarButton
-              icon={FiLink}
-              title="Link"
-              command="createLink"
-              value="http://"
-            />
+
             <ToolbarButton
               icon={FiList}
               title="Unordered List"
@@ -435,10 +438,10 @@ export default function MessageInput({ onSend, members }) {
               value="blockquote"
             />
 
-            {/* Emoji Picker Button */}
+            {/* Emoji Picker */}
             <div className="relative">
               <button
-                onMouseDown={(e) => e.preventDefault()} // Prevent contentEditable blur
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                 title="Emoji"
                 className="p-1 rounded text-gray-500 hover:bg-gray-200 transition-colors"
@@ -448,7 +451,7 @@ export default function MessageInput({ onSend, members }) {
               {showEmojiPicker && (
                 <div
                   ref={emojiPickerRef}
-                  className="absolute top-full z-10000 left-0 mt-1 p-2 bg-white border border-gray-300 rounded shadow-lg z-1000 w-100 flex  gap-1"
+                  className="absolute top-full z-10000 left-0 mt-1 p-2 bg-white border border-gray-300 rounded shadow-lg z-1000 w-100 flex gap-1"
                 >
                   {EMOJIS.map((emoji) => (
                     <button
@@ -491,7 +494,7 @@ export default function MessageInput({ onSend, members }) {
             </button>
             <button
               onClick={sendAudio}
-              className="bg-blue-500 text-white p-2 rounded-full ml-2 hover:bg-blue-600 transition-colors"
+              className="bg-[#001C57] text-white p-2 rounded-full ml-2 transition-colors"
               title="Send voice message"
             >
               <FiSend size={20} />
@@ -499,7 +502,6 @@ export default function MessageInput({ onSend, members }) {
           </div>
         ) : (
           <div className="flex items-center p-3">
-            {/* Editable input */}
             <div
               ref={editorRef}
               contentEditable
@@ -510,8 +512,6 @@ export default function MessageInput({ onSend, members }) {
               suppressContentEditableWarning
               style={{ whiteSpace: "pre-wrap" }}
             />
-
-            {/* Right-side Action Buttons */}
             <div className="flex items-center space-x-1 flex-shrink-0 ml-3">
               <button
                 className={`p-1 ${
@@ -540,11 +540,13 @@ export default function MessageInput({ onSend, members }) {
               />
               <button
                 onClick={handleSend}
-                className="p-2 text-white bg-blue-500 rounded-full hover:bg-blue-600 transition-colors disabled:opacity-50"
-                disabled={isInputEmpty}
-                title="Send message"
+                className="p-2 text-white bg-[#001C57] rounded-full hover:bg-blue-900 transition-colors disabled:opacity-50"
+                // This line correctly disables the button if input is empty OR if sending is in progress.
+                disabled={isInputEmpty || isSending}
+                title={isSending ? "Sending..." : "Send message"}
               >
-                <FiSend size={20} />
+                {/* This line correctly shows the loader if sending is in progress. */}
+                {isSending ? <Loader /> : <FiSend size={20} />}
               </button>
             </div>
           </div>
@@ -552,23 +554,27 @@ export default function MessageInput({ onSend, members }) {
       </div>
 
       <style jsx>{`
-        /* Styles for the placeholder text */
         [data-placeholder]:empty:not(:focus)::before {
           content: attr(data-placeholder);
           color: #9ca3af;
           pointer-events: none;
         }
-        /* Styles for the mention tag */
-        [data-mention] {
-          background: rgba(59, 130, 246, 0.12);
-          color: #1d4ed8;
-          padding: 0 4px;
+        [data-mention-list] {
+          padding: 0 2px;
           border-radius: 6px;
           margin-right: 2px;
           display: inline-block;
-          white-space: nowrap; /* Keep the mention tag together */
+          white-space: nowrap;
         }
-        /* Ensure the input looks clean */
+        [data-mention] {
+          font-weight: bold;
+          color: #0c4a6e;
+          padding: 0 2px;
+          border-radius: 6px;
+          margin-right: 2px;
+          display: inline-block;
+          white-space: nowrap;
+        }
         [contentEditable="true"]:empty:focus::before {
           content: attr(data-placeholder);
           color: #9ca3af;

@@ -1,3 +1,9 @@
+// =========================================================================================
+// REVISED ChatContainer.jsx
+// The main changes are within the handleSendMessage function.
+// The useState for localMessages is kept for now, but its usage inside handleSendMessage is removed.
+// =========================================================================================
+
 /* global ZOHO */
 import { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
@@ -5,6 +11,7 @@ import { addMessage, updateMessage } from "../Store/MessageSlice";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
+import { fetchMessages } from "../Store/MessageSlice";
 export default function ChatContainer({
   activeChannel,
   activePerson,
@@ -14,14 +21,13 @@ export default function ChatContainer({
 }) {
   const dispatch = useDispatch();
   const allMessages = useSelector((state) => state.messages.all);
+  // Keep localMessages, but stop adding to it in handleSendMessage
   const [localMessages, setLocalMessages] = useState([]);
   const [messages, setMessages] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const combinedMessages = [...messages, ...localMessages];
 
-  // ========================
-  // Format date for Zoho
-  // ========================
+  // ... (formatZohoDateTime function remains the same) ...
   const formatZohoDateTime = (date) => {
     const d = new Date(date);
     const day = String(d.getDate()).padStart(2, "0");
@@ -46,9 +52,7 @@ export default function ChatContainer({
     const seconds = String(d.getSeconds()).padStart(2, "0");
     return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
   };
-  // ========================
-  // Filter messages for active chat
-  // ========================
+  // ... (useEffect for message filtering remains the same) ...
   useEffect(() => {
     let filtered = [];
     if (activeChannel) {
@@ -64,15 +68,32 @@ export default function ChatContainer({
       );
     }
 
-    // Sort by date
-    filtered.sort((a, b) => new Date(a.Added_Time) - new Date(b.Added_Time));
+    filtered.sort((a, b) => {
+      // 1. Primary Sort: Time (in milliseconds)
+      const timeA = new Date(a.Added_Time).getTime();
+      const timeB = new Date(b.Added_Time).getTime();
+
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+
+      // 2. Secondary Sort (Tie-Breaker): ID (String Comparison)
+      // This is safer for long numeric IDs from a database, as it sorts lexicographically.
+      // The earlier message will have the "smaller" ID string.
+      if (a.ID < b.ID) {
+        return -1; // a comes before b
+      }
+      if (a.ID > b.ID) {
+        return 1; // a comes after b
+      }
+      return 0; // IDs are identical (should not happen)
+    });
 
     setMessages(filtered);
   }, [activeChannel, activePerson, allMessages, currentUser]);
 
-  // ========================
-  // Handle pin/unpin a message
-  // ========================
+  // ... (handlePinToggle and handleMessageClick functions remain the same) ...
+
   const handlePinToggle = (msg) => {
     const newPin = msg.Pin === true || msg.Pin === "true" ? false : true;
 
@@ -93,9 +114,6 @@ export default function ChatContainer({
     }).then((res) => console.log("📌 Pin updated:", res));
   };
 
-  // ========================
-  // Handle message click (mention)
-  // ========================
   const handleMessageClick = async (msg) => {
     if (msg.Mentioned !== "true") return;
     const formName = msg.ChannelName
@@ -115,15 +133,12 @@ export default function ChatContainer({
     );
   };
 
-  // ========================
-  // Handle send message
-  // ========================
+  // ===================================
+  // ✅ REVISED handleSendMessage
+  // Removed local (optimistic) updates.
+  // ===================================
 
-  // ========================
-  // Handle send message
-  // ========================
-
-  const handleSendMessage = async ({ text, file }) => {
+  const handleSendMessage = async ({ text, file, callback }) => {
     const messageText = text || "";
     const lowerText = messageText.toLowerCase();
 
@@ -135,23 +150,11 @@ export default function ChatContainer({
     const Mentioned = mentionDetected ? "true" : "false";
     const Notified = "false";
 
-    const tempId = Date.now().toString();
-    const tempMsg = {
-      ID: tempId,
-      Message: messageText,
-      SentBy: currentUser,
-      Added_Time: formatZohoDateTime(new Date()),
-      local: true,
-      Mentioned,
-      Notified,
-      Pin: "false",
-      File: file ? file.name : null, // store filename locally
-    };
-
-    setLocalMessages((prev) => [...prev, tempMsg]);
-    dispatch(addMessage(tempMsg));
-
     const isChannel = !!activeChannel;
+    const formName = isChannel
+      ? "ChannelsHiddenForm"
+      : "PersonToPersonHiddenForm";
+
     const payload = isChannel
       ? {
           IDC: activeChannel.IDC,
@@ -174,32 +177,51 @@ export default function ChatContainer({
     console.log("file : ", file);
     ZOHO.CREATOR.DATA.addRecords({
       app_name: "admiral-field-portal",
-      form_name: isChannel ? "ChannelsHiddenForm" : "PersonToPersonHiddenForm",
+      form_name: formName,
       payload: { data: payload },
     }).then((res) => {
       console.log("Record created:", res);
 
       const recordId = res.data && res.data.ID;
       console.log(recordId);
-      // Upload file if attached
-      var config1 = {
-        app_name: "admiral-field-portal",
-        report_name: "ChannelsHiddenForm_Report",
-        id: recordId,
-        field_name: "File_upload",
-        file: file,
+      const completeSend = () => {
+        // 1. Turn off the loader in MessageInput
+        if (callback) callback();
+        // 2. Fetch the newly added message from the server
+        dispatch(fetchMessages(currentUser));
       };
-      console.log(config1);
+      // Upload file if attached
       if (recordId && file) {
+        // NOTE: The report_name must match the form used in addRecords for the file upload to work.
+        // It looks like you're using 'ChannelsHiddenForm_Report' for both person and channel in your original file upload logic,
+        // which might be incorrect if you have separate forms/reports. Assuming the Channel form report name is used here as a placeholder.
+        var config1 = {
+          app_name: "admiral-field-portal",
+          report_name: isChannel
+            ? "ChannelsHiddenForm_Report"
+            : "PersonToPersonHiddenForm_Report", // Adjusted based on formName
+          id: recordId,
+          field_name: "File_upload",
+          file: file,
+        };
+        console.log(config1);
         ZOHO.CREATOR.FILE.uploadFile(config1).then(function (response) {
           console.log("File uploaded:", response);
+          completeSend();
+          // *** IMPORTANT: The message will only appear after the file upload and successful data refresh
+          // (which presumably happens elsewhere in your app, e.g., a Redux action triggered by a webhook/polling).
         });
+      } else {
+        // No file to upload, just complete the send process
+        completeSend();
       }
 
-      // Remove temp message
-      setLocalMessages((prev) => prev.filter((m) => m.ID !== tempId));
+      // *** REMOVED: setLocalMessages((prev) => prev.filter((m) => m.ID !== tempId));
+      // *** REMOVED: The temporary message creation and local state/Redux dispatch are gone.
+      // The message will now appear when the Zoho API confirms it and triggers a global state update.
     });
   };
+
   if (!activeChannel && !activePerson) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400">
@@ -212,9 +234,7 @@ export default function ChatContainer({
     ? activeChannel.ChannelName
     : activePerson?.Name || "Unknown User";
 
-  // ========================
-  // Filter messages by search term
-  // ========================
+  // ... (filteredMessages and handleAddMember functions remain the same) ...
   const filteredMessages = combinedMessages.filter((msg) => {
     if (!searchTerm) return true;
     const lower = searchTerm.toLowerCase();
@@ -305,7 +325,11 @@ export default function ChatContainer({
         onPinToggle={handlePinToggle}
       />
 
-      <MessageInput onSend={handleSendMessage} members={allUsers} />
+      <MessageInput
+        onSend={handleSendMessage}
+        members={allUsers}
+        currentUser={currentUser}
+      />
     </div>
   );
 }
