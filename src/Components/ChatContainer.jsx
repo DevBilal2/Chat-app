@@ -224,8 +224,13 @@ export default function ChatContainer({
 
   if (!activeChannel && !activePerson) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-400">
-        Select a channel or person to start chatting 💬
+      <div className="flex-1 flex flex-col items-center justify-center text-gray-500 px-4 text-center">
+        <div className="max-w-xs">
+          <p className="text-lg font-medium mb-2">No Conversation Selected</p>
+          <p className="text-sm">
+            Tap or click a channel or person to start chatting 💬
+          </p>
+        </div>
       </div>
     );
   }

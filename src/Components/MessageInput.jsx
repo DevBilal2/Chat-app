@@ -479,7 +479,7 @@ export default function MessageInput({ onSend, members, currentUser }) {
               onClick={stopRecording}
               className="flex items-center justify-center w-8 h-8 bg-red-500 rounded-full shadow-md hover:bg-red-600 transition-all"
             >
-              <FiSquare size={14} className="text-white" />
+              <FiSquare className="sm:size-4 md:size-5 lg:size-6 text-white" />
             </button>
           </div>
         ) : isPreview && audioURL ? (
@@ -490,14 +490,14 @@ export default function MessageInput({ onSend, members, currentUser }) {
               className="text-red-500 ml-3 hover:text-red-700 transition-colors"
               title="Delete recording"
             >
-              <FiTrash2 size={20} />
+              <FiTrash2 className="sm:size-4 md:size-5 lg:size-6" />
             </button>
             <button
               onClick={sendAudio}
               className="bg-[#001C57] text-white p-2 rounded-full ml-2 transition-colors"
               title="Send voice message"
             >
-              <FiSend size={20} />
+              <FiSend className="sm:size-4 md:size-5 lg:size-6" />
             </button>
           </div>
         ) : (
@@ -507,7 +507,7 @@ export default function MessageInput({ onSend, members, currentUser }) {
               contentEditable
               onInput={handleInput}
               onKeyDown={handleKeyDown}
-              className="flex-1 p-1 outline-none min-h-[40px] break-words max-h-32 overflow-y-auto"
+              className="flex-1 p-1 outline-none min-h-[40px] break-words max-h-32 overflow-y-auto text-sm sm:text-base"
               data-placeholder="Message #acct-midtech (use Shift+Enter for new line)"
               suppressContentEditableWarning
               style={{ whiteSpace: "pre-wrap" }}
@@ -523,14 +523,14 @@ export default function MessageInput({ onSend, members, currentUser }) {
                 onClick={startRecording}
                 disabled={!isInputEmpty}
               >
-                <FiMic size={20} />
+                <FiMic className="sm:size-4 md:size-5 lg:size-6" />
               </button>
               <button
                 className="p-1 text-gray-600 hover:text-gray-800"
                 onClick={() => fileInputRef.current.click()}
                 title="Attach file"
               >
-                <FiPaperclip size={20} />
+                <FiPaperclip className="sm:size-4 md:size-5 lg:size-6" />
               </button>
               <input
                 type="file"
@@ -546,7 +546,11 @@ export default function MessageInput({ onSend, members, currentUser }) {
                 title={isSending ? "Sending..." : "Send message"}
               >
                 {/* This line correctly shows the loader if sending is in progress. */}
-                {isSending ? <Loader /> : <FiSend size={20} />}
+                {isSending ? (
+                  <Loader />
+                ) : (
+                  <FiSend className="sm:size-4 md:size-5 lg:size-6" />
+                )}
               </button>
             </div>
           </div>
@@ -578,6 +582,17 @@ export default function MessageInput({ onSend, members, currentUser }) {
         [contentEditable="true"]:empty:focus::before {
           content: attr(data-placeholder);
           color: #9ca3af;
+        }
+        @media (max-width: 640px) {
+          [data-placeholder]:empty:not(:focus)::before {
+            content: "Type here...";
+            color: #9ca3af;
+          }
+        }
+        @media (min-width: 641px) {
+          [data-placeholder]:empty:not(:focus)::before {
+            content: attr(data-placeholder);
+          }
         }
       `}</style>
     </div>

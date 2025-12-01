@@ -276,25 +276,32 @@ export default function Sidebar({
 
       {/* New Conversation Modal */}
       {showSearchModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5 relative">
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[2000] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm sm:max-w-md p-5 sm:p-6 relative">
+            {/* Close Button */}
             <button
               onClick={() => setShowSearchModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 transition-colors text-lg"
             >
               ✖
             </button>
-            <h3 className="font-bold text-xl mb-4 text-gray-800">
+
+            {/* Heading */}
+            <h3 className="font-bold  lg:text-md sm:text-sm mb-4 text-gray-800 text-center whitespace-nowrap">
               Start New Conversation
             </h3>
+
+            {/* Search Input */}
             <input
               type="text"
               placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
             />
-            <div className="max-h-60 overflow-y-auto">
+
+            {/* User List */}
+            <div className="max-h-60 overflow-y-auto border-t border-gray-100 pt-2">
               {allUsers
                 .filter(
                   (u) =>
@@ -309,7 +316,7 @@ export default function Sidebar({
                       handlePersonClick(user);
                       setShowSearchModal(false);
                     }}
-                    className="cursor-pointer px-3 py-2 hover:bg-gray-100 rounded flex items-center"
+                    className="cursor-pointer px-3 py-2 hover:bg-gray-100 rounded flex items-center text-sm sm:text-base transition"
                   >
                     {user.Name}
                   </div>

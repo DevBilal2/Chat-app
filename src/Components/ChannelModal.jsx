@@ -84,23 +84,29 @@ export default function ChannelModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white text-black p-6 rounded-lg w-96 shadow-xl">
-        <h3 className="text-xl font-semibold mb-3">Create Channel</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1999] px-4">
+      <div className="bg-white text-black w-full max-w-sm sm:max-w-md md:max-w-lg p-5 rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h3 className="text-xl font-semibold mb-3 text-center">
+          Create Channel
+        </h3>
+
         <input
           placeholder="Channel name..."
           value={channelName}
           onChange={(e) => setChannelName(e.target.value)}
-          className="w-full border border-gray-300 rounded p-2 mb-3"
+          className="w-full border border-gray-300 rounded p-2 mb-3 text-sm"
         />
-        <div className="max-h-48 overflow-auto border border-gray-200 p-2 rounded">
+
+        <div className="max-h-52 overflow-auto border border-gray-200 p-2 rounded">
           {loading ? (
-            <p>Loading members...</p>
+            <p className="text-center text-gray-500 text-sm">
+              Loading members...
+            </p>
           ) : members.length > 0 ? (
             members.map((m, i) => (
               <label
                 key={i}
-                className="flex items-center gap-2 border-b border-gray-100 py-1"
+                className="flex items-center gap-2 border-b border-gray-100 py-1 text-sm"
               >
                 <input
                   type="checkbox"
@@ -111,18 +117,21 @@ export default function ChannelModal({
               </label>
             ))
           ) : (
-            <p>No members found.</p>
+            <p className="text-center text-gray-500 text-sm">
+              No members found.
+            </p>
           )}
         </div>
+
         <button
           onClick={handleCreate}
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded mt-3 py-2 transition-all"
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded mt-4 py-2 transition-all text-sm"
         >
           Create Channel
         </button>
         <button
           onClick={onClose}
-          className="w-full border border-gray-300 rounded mt-2 py-2"
+          className="w-full border border-gray-300 hover:bg-gray-100 rounded mt-2 py-2 text-sm"
         >
           Cancel
         </button>
