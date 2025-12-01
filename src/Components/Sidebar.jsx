@@ -4,7 +4,6 @@ import { useSelector, useDispatch } from "react-redux";
 import ChannelModal from "./ChannelModal";
 import { fetchMessages, markHighlighted } from "../Store/MessageSlice";
 import { FiSearch } from "react-icons/fi";
-
 export default function Sidebar({
   onSelectPerson,
   onSelectChat,
@@ -27,29 +26,43 @@ export default function Sidebar({
   // Fetch channels for current user
   useEffect(() => {
     if (!currentUser) return;
-    ZOHO.CREATOR.DATA.getRecords({
-      app_name: "admiral-field-portal",
-      report_name: "ChannelsHiddenForm_Report",
-    })
-      .then((res) => {
-        const allChannels = res.data || [];
-        const userChannels = allChannels
-          .filter((chan) =>
-            (chan.RecievedByC || "")
-              .split(",")
-              .map((m) => m.trim().toLowerCase())
-              .includes(currentUser.toLowerCase())
-          )
-          .filter(
-            (chan, index, self) =>
-              index ===
-              self.findIndex((c) => c.ChannelName === chan.ChannelName)
-          );
-        setChannels(userChannels);
-      })
-      .catch(console.error);
-  }, [currentUser, activeChannel]);
 
+    const timeout = setTimeout(() => {
+      ZOHO.CREATOR.DATA.getRecords({
+        app_name: "admiral-field-portal",
+        report_name: "ChannelsHiddenForm_Report",
+      })
+        .then((res) => {
+          const allChannels = res.data || [];
+          const userChannels = allChannels
+            .filter((chan) =>
+              (chan.RecievedByC || "")
+                .split(",")
+                .map((m) => m.trim().toLowerCase())
+                .includes(currentUser.toLowerCase())
+            )
+            .filter(
+              (chan, index, self) =>
+                index ===
+                self.findIndex((c) => c.ChannelName === chan.ChannelName)
+            );
+
+          // Force React re-render
+          setChannels([...userChannels]);
+          // Optionally open sidebar immediately after channels load
+          setSidebarOpen(true);
+        })
+        .catch(console.error);
+    }, 1000); // 0.5 second delay works well for iOS
+
+    return () => clearTimeout(timeout);
+  }, [currentUser, activeChannel]);
+  useEffect(() => {
+    // Force update for Safari/iOS
+    if (channels.length > 0) {
+      setChannels([...channels]);
+    }
+  }, [channels]);
   useEffect(() => {
     if (!activeChannel) return;
     const stillExists = channels.some((chan) => chan.ID === activeChannel.ID);
@@ -68,6 +81,7 @@ export default function Sidebar({
   // Classify users
 
   // Poll messages every 5 seconds
+
   useEffect(() => {
     if (!currentUser) return;
     dispatch(fetchMessages(currentUser));

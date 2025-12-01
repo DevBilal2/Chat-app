@@ -507,7 +507,7 @@ export default function MessageInput({ onSend, members, currentUser }) {
               contentEditable
               onInput={handleInput}
               onKeyDown={handleKeyDown}
-              className="flex-1 p-1 outline-none min-h-[40px] break-words max-h-32 overflow-y-auto text-sm sm:text-base"
+              className="flex-1 p-1 outline-none min-h-[40px] break-words max-h-32 overflow-y-auto text-base sm:text-base"
               data-placeholder="Message #acct-midtech (use Shift+Enter for new line)"
               suppressContentEditableWarning
               style={{ whiteSpace: "pre-wrap" }}
@@ -580,6 +580,11 @@ export default function MessageInput({ onSend, members, currentUser }) {
           white-space: nowrap;
         }
         [contentEditable="true"]:empty:focus::before {
+          font-size: 16px;
+          min-height: 40px; /* ensure visible area */
+          line-height: 1.4;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
           content: attr(data-placeholder);
           color: #9ca3af;
         }
