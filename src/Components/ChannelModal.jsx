@@ -94,7 +94,7 @@ export default function ChannelModal({
           placeholder="Channel name..."
           value={channelName}
           onChange={(e) => setChannelName(e.target.value)}
-          className="w-full border border-gray-300 rounded p-2 mb-3 text-sm"
+          className="w-full border border-gray-300 rounded p-2 mb-3 text-[16px]"
         />
 
         <div className="max-h-52 overflow-auto border border-gray-200 p-2 rounded">

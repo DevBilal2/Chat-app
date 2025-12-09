@@ -17,7 +17,7 @@ export default function App() {
 
   // 🟢 Top notification banner
   const [topNotification, setTopNotification] = useState("");
-
+  console.log("notification", topNotification);
   // ========== Load Initial User ==========
   useEffect(() => {
     ZOHO.CREATOR.UTIL.getInitParams().then((res) => {

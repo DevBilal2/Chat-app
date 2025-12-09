@@ -253,7 +253,9 @@ export default function MessageList({
   const isAudioFile = (fileName) => {
     if (!fileName) return false;
     const extension = fileName.split(".").pop().toLowerCase();
-    return ["mp3", "ogg", "wav", "webm", "m4a"].includes(extension);
+    return ["mp3", "ogg", "wav", "webm", "m4a", "aac", "caf"].includes(
+      extension
+    );
   };
 
   const getCreatorFileUrl = (fileUpload) => {
@@ -284,7 +286,10 @@ export default function MessageList({
         ? channelMessageToken
         : personMessageToken;
 
-    const finalUrl = `https://creatorapp.zoho.com/${appOwner}/${appName}/report/${reportName}/${recordId}/${fieldName}/download-file/${token}?filepath=${fileName}`;
+    // const finalUrl = `https://creatorapp.zoho.com/${appOwner}/${appName}/report/${reportName}/${recordId}/${fieldName}/download-file/${token}?filepath=${fileName}`;
+    const finalUrl = `https://creatorapp.zoho.com/${appOwner}/${appName}/report/${reportName}/${recordId}/${fieldName}/download-file/${token}?filepath=${encodeURIComponent(
+      fileName
+    )}`;
 
     return { url: finalUrl, fileName: fileName };
   };
@@ -449,8 +454,8 @@ export default function MessageList({
                             <audio
                               src={fileUrl}
                               controls
-                              className=" h-8 rounded-md"
-                              preload="metadata" // <- important
+                              className="h-8 rounded-md"
+                              preload="metadata" // important for iOS
                             >
                               Your browser does not support the audio element.
                             </audio>

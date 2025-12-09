@@ -207,6 +207,7 @@ export default function ChatContainer({
         console.log(config1);
         ZOHO.CREATOR.FILE.uploadFile(config1).then(function (response) {
           console.log("File uploaded:", response);
+
           completeSend();
           // *** IMPORTANT: The message will only appear after the file upload and successful data refresh
           // (which presumably happens elsewhere in your app, e.g., a Redux action triggered by a webhook/polling).
@@ -309,7 +310,7 @@ export default function ChatContainer({
           placeholder="Search messages or users..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-3/5 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-3/5 rounded-md border border-gray-300 px-3 py-2 text-[16px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 

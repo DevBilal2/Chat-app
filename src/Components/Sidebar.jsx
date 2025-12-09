@@ -1,4 +1,5 @@
 /* global ZOHO */
+import DOMPurify from "dompurify";
 import { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import ChannelModal from "./ChannelModal";
@@ -15,15 +16,15 @@ export default function Sidebar({
 }) {
   const dispatch = useDispatch();
   const messages = useSelector((state) => state.messages.all);
-
+  const [activeConversation, setActiveConversation] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [channels, setChannels] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [sidebarSearch, setSidebarSearch] = useState("");
+  const [modalSearch, setModalSearch] = useState("");
   const [activeConversations, setActiveConversations] = useState([]);
 
-  // Fetch channels for current user
   useEffect(() => {
     if (!currentUser) return;
 
@@ -41,42 +42,67 @@ export default function Sidebar({
                 .map((m) => m.trim().toLowerCase())
                 .includes(currentUser.toLowerCase())
             )
+            // ✅ Only channels with no message AND no file
+            .filter((chan) => {
+              const noMessage = !chan.Message || chan.Message.trim() === "";
+              const noFile =
+                !chan.File_Upload ||
+                chan.File_Upload.length === 0 ||
+                chan.File_Upload === "";
+              return noMessage && noFile;
+            })
+            // Remove duplicate channel names
             .filter(
               (chan, index, self) =>
                 index ===
                 self.findIndex((c) => c.ChannelName === chan.ChannelName)
             );
 
-          // Force React re-render
-          setChannels([...userChannels]);
-          // Optionally open sidebar immediately after channels load
-          setSidebarOpen(true);
+          setChannels(userChannels);
         })
         .catch(console.error);
-    }, 1000); // 0.5 second delay works well for iOS
+    }, 1000);
 
     return () => clearTimeout(timeout);
   }, [currentUser, activeChannel]);
+
   useEffect(() => {
     // Force update for Safari/iOS
     if (channels.length > 0) {
       setChannels([...channels]);
     }
-  }, [channels]);
+  }, []);
   useEffect(() => {
     if (!activeChannel) return;
     const stillExists = channels.some((chan) => chan.ID === activeChannel.ID);
     if (!stillExists) {
       if (channels.length > 0) {
+        // Case 1: Channel removed, but others remain (select the first one)
         const nextChannel = channels[0];
         setActiveChannel(nextChannel);
         onSelectChat(nextChannel);
+      } else if (activeConversations.length > 0) {
+        // Case 2: All channels gone, select the first DM conversation
+        const nextPerson = activeConversations[0];
+        setActiveChannel(null); // Clear the channel state
+
+        setActiveConversation(nextPerson); // Set the person state
+        onSelectPerson(nextPerson); // Switch to person view (DM)
       } else {
+        // Case 3: No channels and no DMs left. Show a blank screen.
         setActiveChannel(null);
-        onSelectChat(null);
+        onSelectChat(null); // Ensure activeConversation is also reset
+        setActiveConversation(null);
       }
     }
-  }, [channels, activeChannel, setActiveChannel, onSelectChat]);
+  }, [
+    channels,
+    activeChannel,
+    activeConversations,
+    setActiveChannel,
+    onSelectChat,
+    onSelectPerson,
+  ]);
 
   // Classify users
 
@@ -118,7 +144,7 @@ export default function Sidebar({
   }, [messages, allUsers, currentUser]);
 
   const filteredUsers = activeConversations.filter((user) =>
-    user.Name.toLowerCase().includes(searchTerm.toLowerCase())
+    user.Name.toLowerCase().includes(sidebarSearch.toLowerCase())
   );
 
   // Compute unread highlights
@@ -154,9 +180,9 @@ export default function Sidebar({
       }
     }
   });
-
   useEffect(() => {
     if (!currentUser || !myName) return;
+    console.log("Checking for app notifications...");
     messages.forEach((msg) => {
       const needHighlight = String(msg.Need_Highlight).toLowerCase() === "true";
       const appNotif = String(msg.App_Notification).toLowerCase() === "true";
@@ -166,10 +192,11 @@ export default function Sidebar({
       if (!needHighlight || appNotif || alreadyHighlighted) return;
 
       let shouldNotify = false;
-      const messageText = (msg.Message || "").toLowerCase(); // Define messageText here
-
+      const messageText = DOMPurify.sanitize(msg.Message || "", {
+        ALLOWED_TAGS: [],
+      }).toLowerCase();
       if (msg.ChannelName && msg.RecievedByC) {
-        // 🛑 MODIFICATION HERE: Only notify if they are mentioned (@myName)
+        // 🛑 MODIFICATION HERE: Check against the now clean (plain) messageText
         if (messageText.includes(`@${myName}`)) {
           shouldNotify = true;
         }
@@ -190,25 +217,26 @@ export default function Sidebar({
             msg.ChannelName ||
             (msg.SentBy?.toLowerCase() === myEmail
               ? msg.RecievedBy
-              : msg.SentBy);
+              : msg.SentBy); // 2️⃣ Get email of actual sender (not you)
 
-          // 2️⃣ Get email of actual sender (not you)
           const senderEmail =
             msg.SentBy?.toLowerCase() === myEmail
               ? msg.RecievedBy?.toLowerCase()
-              : msg.SentBy?.toLowerCase();
+              : msg.SentBy?.toLowerCase(); // 3️⃣ Find sender name from allUsers
 
-          // 3️⃣ Find sender name from allUsers
           const userData = allUsers.find(
             (u) => u.Email?.toLowerCase() === senderEmail
-          );
+          ); // 4️⃣ Use full name → fallback to email if not found
 
-          // 4️⃣ Use full name → fallback to email if not found
-          const senderName = userData?.Name || senderEmail || "You";
+          const senderName = userData?.Name || senderEmail || "You"; // Get original message text
 
-          const messageText = msg.Message || "";
+          const originalMessageText = DOMPurify.sanitize(msg.Message || "", {
+            ALLOWED_TAGS: [],
+          }).toLowerCase();
+          // 🧹 DOM Purify the message text immediately before use
+          const sanitizedMessageText = DOMPurify.sanitize(originalMessageText);
 
-          onNotify(targetId, senderName, messageText);
+          onNotify(targetId, senderName, sanitizedMessageText);
         }
 
         const reportName = msg.ChannelName
@@ -236,6 +264,10 @@ export default function Sidebar({
 
   const handleChannelClick = (channel) => {
     onSelectChat(channel);
+    setActiveConversation(null);
+
+    // Set the selected channel
+    setActiveChannel(channel);
     setSidebarOpen(false);
 
     messages
@@ -250,6 +282,7 @@ export default function Sidebar({
 
   const handlePersonClick = (person) => {
     onSelectPerson(person);
+    setActiveConversation(person);
     setSidebarOpen(false);
 
     // Add to conversation list if not already there
@@ -282,6 +315,7 @@ export default function Sidebar({
           onChannelCreated={(newChannel) => {
             setChannels((prev) => [newChannel, ...prev]);
             setActiveChannel(newChannel);
+            setActiveConversation(null);
             setShowModal(false);
             onSelectChat(newChannel);
           }}
@@ -309,9 +343,9 @@ export default function Sidebar({
             <input
               type="text"
               placeholder="Search users..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+              value={modalSearch}
+              onChange={(e) => setModalSearch(e.target.value)}
+              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-[16px]"
             />
 
             {/* User List */}
@@ -319,9 +353,9 @@ export default function Sidebar({
               {allUsers
                 .filter(
                   (u) =>
-                    !activeConversations.some((c) => c.Email === u.Email) &&
+                    activeConversations.some((c) => c.Email === u.Email) &&
                     u.Email.toLowerCase() !== currentUser.toLowerCase() &&
-                    u.Name.toLowerCase().includes(searchTerm.toLowerCase())
+                    u.Name.toLowerCase().includes(modalSearch.toLowerCase())
                 )
                 .map((user) => (
                   <div
@@ -384,7 +418,9 @@ export default function Sidebar({
                     key={chan.ID}
                     onClick={() => handleChannelClick(chan)}
                     className={`cursor-pointer px-2 py-1 rounded flex justify-between items-center transition-all ${
-                      hasHighlight
+                      activeChannel?.ID === chan.ID
+                        ? "bg-gray-400" // Active highlight
+                        : hasHighlight
                         ? "bg-yellow-500/20 hover:bg-yellow-500/30"
                         : "hover:bg-[#404249]"
                     }`}
@@ -424,7 +460,9 @@ export default function Sidebar({
                     key={user.ID}
                     onClick={() => handlePersonClick(user)}
                     className={`cursor-pointer px-2 py-1 rounded flex justify-between items-center ${
-                      hasHighlight
+                      activeConversation?.Email === user.Email
+                        ? "bg-gray-400" // Active highlight
+                        : hasHighlight
                         ? "bg-yellow-500/20 hover:bg-yellow-500/30"
                         : "hover:bg-[#404249]"
                     }`}
@@ -438,7 +476,7 @@ export default function Sidebar({
               })
             ) : (
               <p className="text-gray-400 text-xs">
-                {searchTerm ? "No matching users" : "No conversations yet"}
+                {sidebarSearch ? "No matching users" : "No conversations yet"}
               </p>
             )}
           </div>

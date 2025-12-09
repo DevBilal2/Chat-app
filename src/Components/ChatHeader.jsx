@@ -64,10 +64,9 @@ export default function ChatHeader({
 
   // Handle leaving channel (removing current user)
   const handleLeaveChannel = () => {
-    if (window.confirm("Are you sure you want to leave this channel?")) {
-      onAddMember([currentUser], "remove"); // call remove
-      setMenuOpen(false); //
-    }
+    onAddMember([currentUser], "remove"); // call remove
+    setMenuOpen(false);
+    alert("You have left the channel");
   };
 
   return (
@@ -171,7 +170,7 @@ export default function ChatHeader({
               value={customEmail}
               onChange={(e) => setCustomEmail(e.target.value)}
               placeholder="Enter custom email address"
-              className="w-full border border-gray-300 px-4 py-2 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+              className="w-full border text-[16px] border-gray-300 px-4 py-2 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
             />
 
             <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 mb-4 bg-gray-50">

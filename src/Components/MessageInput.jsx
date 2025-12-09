@@ -219,18 +219,38 @@ export default function MessageInput({ onSend, members, currentUser }) {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      let options = {};
+
+      if (MediaRecorder.isTypeSupported("audio/mp3")) {
+        options.mimeType = "audio/mp3"; // iPhone supported
+      } else if (MediaRecorder.isTypeSupported("audio/aac")) {
+        options.mimeType = "audio/aac"; // fallback for Safari
+      } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+        options.mimeType = "audio/webm"; // desktop + Android
+      }
+
+      mediaRecorderRef.current = new MediaRecorder(stream, options);
+
+      mediaRecorderRef.current = new MediaRecorder(stream, options);
       let chunks = [];
 
       mediaRecorderRef.current.ondataavailable = (e) => chunks.push(e.data);
       mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(chunks, { type: "audio/webm" });
+        let mimeType = "audio/webm";
+
+        if (MediaRecorder.isTypeSupported("audio/mp3")) {
+          mimeType = "audio/mp3";
+        } else if (MediaRecorder.isTypeSupported("audio/aac")) {
+          mimeType = "audio/aac";
+        }
+
+        const blob = new Blob(chunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
+
         setAudioBlob(blob);
         setAudioURL(url);
         setIsPreview(true);
       };
-
       mediaRecorderRef.current.start();
       setRecordingTime(0);
       setIsRecording(true);
@@ -239,6 +259,10 @@ export default function MessageInput({ onSend, members, currentUser }) {
     }
   };
 
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; // Exclude Windows 10 Edge
+  const isSafari =
+    /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
   const stopRecording = () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -259,11 +283,18 @@ export default function MessageInput({ onSend, members, currentUser }) {
 
   const sendAudio = () => {
     if (!audioBlob) return;
-    setIsSending(true); // Start loader
-    const audioFile = new File([audioBlob], "voice-message.webm", {
-      type: "audio/webm",
+    setIsSending(true);
+
+    // Force mp4 for iOS / Safari
+    const mimeType = "audio/mp3";
+    const fileName = "voice-message.mp3";
+
+    const audioFile = new File([audioBlob], fileName, { type: mimeType });
+    onSend({
+      text: "",
+      file: audioFile,
+      callback: () => setIsSending(false),
     });
-    onSend({ text: "", file: audioFile, callback: () => setIsSending(false) });
     resetVoiceState();
   };
 
@@ -483,22 +514,36 @@ export default function MessageInput({ onSend, members, currentUser }) {
             </button>
           </div>
         ) : isPreview && audioURL ? (
-          <div className="flex items-center p-3">
-            <audio ref={audioRef} src={audioURL} controls className="flex-1" />
-            <button
-              onClick={resetVoiceState}
-              className="text-red-500 ml-3 hover:text-red-700 transition-colors"
-              title="Delete recording"
-            >
-              <FiTrash2 className="sm:size-4 md:size-5 lg:size-6" />
-            </button>
-            <button
-              onClick={sendAudio}
-              className="bg-[#001C57] text-white p-2 rounded-full ml-2 transition-colors"
-              title="Send voice message"
-            >
-              <FiSend className="sm:size-4 md:size-5 lg:size-6" />
-            </button>
+          <div className="flex flex-row  sm:items-center p-3 gap-3 w-full">
+            <audio
+              ref={audioRef}
+              src={
+                isIOS && audioBlob && audioBlob.type === "audio/webm"
+                  ? URL.createObjectURL(
+                      new Blob([audioBlob], { type: "audio/mp3" })
+                    )
+                  : audioURL
+              }
+              controls
+              className="w-full sm:flex-1 max-w-full"
+            />
+            <div className="flex items-center justify-end gap-2 w-fit">
+              <button
+                onClick={resetVoiceState}
+                className="text-red-500 hover:text-red-700 transition-colors p-1"
+                title="Delete recording"
+              >
+                <FiTrash2 className="size-4" /> {/* smaller */}
+              </button>
+
+              <button
+                onClick={sendAudio}
+                className="bg-[#001C57] text-white p-1.5 rounded-full transition-colors"
+                title="Send voice message"
+              >
+                <FiSend className="size-4" /> {/* smaller */}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center p-3">

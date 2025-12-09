@@ -2,7 +2,7 @@ export default function Notification({ message, onClose }) {
   if (!message) return null;
 
   // Color classes based on type
-
+  console.log("Testing", message);
   return (
     <div className="fixed top-0 left-0 w-full flex justify-center z-50 px-2">
       <div
