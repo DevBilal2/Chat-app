@@ -21,7 +21,13 @@ export default function App() {
   // ========== Load Initial User ==========
   useEffect(() => {
     ZOHO.CREATOR.UTIL.getInitParams().then((res) => {
-      if (res?.loginUser) setCurrentUser(res.loginUser);
+      console.log(res?.loginUser.includes("%40"));
+      if (res?.loginUser.includes("%40")) {
+        const decodedEmail = decodeURIComponent(res.loginUser);
+        setCurrentUser(decodedEmail.trim().toLowerCase());
+      } else {
+        setCurrentUser(res.loginUser);
+      }
     });
   }, []);
 
@@ -95,13 +101,13 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden font-sans relative">
       {/* Top Notification */}
+
       {topNotification && (
         <Notification
           message={topNotification}
           onClose={handleCloseNotification}
         />
       )}
-
       <Sidebar
         allUsers={allUsers}
         currentUser={currentUser}
@@ -116,7 +122,6 @@ export default function App() {
           handleNotify(targetId, senderName, messageText)
         }
       />
-
       <ChatContainer
         allUsers={allUsers}
         currentUser={currentUser}

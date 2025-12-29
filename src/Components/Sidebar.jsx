@@ -353,8 +353,7 @@ export default function Sidebar({
               {allUsers
                 .filter(
                   (u) =>
-                    activeConversations.some((c) => c.Email === u.Email) &&
-                    u.Email.toLowerCase() !== currentUser.toLowerCase() &&
+                    u.Email.toLowerCase() !== currentUser.toLowerCase() && // exclude yourself
                     u.Name.toLowerCase().includes(modalSearch.toLowerCase())
                 )
                 .map((user) => (

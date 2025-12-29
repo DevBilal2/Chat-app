@@ -24,9 +24,13 @@ export default function ChannelModal({
       setLoading(false);
     });
 
-    ZOHO.CREATOR.UTIL.getInitParams().then((response) => {
-      if (response && response.loginUser) {
-        setCurrentUserEmail(response.loginUser);
+    ZOHO.CREATOR.UTIL.getInitParams().then((res) => {
+      console.log(res?.loginUser.includes("%40"));
+      if (res?.loginUser.includes("%40")) {
+        const decodedEmail = decodeURIComponent(res.loginUser);
+        setCurrentUserEmail(decodedEmail.trim().toLowerCase());
+      } else {
+        setCurrentUserEmail(res.loginUser);
       }
     });
   }, []);
@@ -48,25 +52,25 @@ export default function ChannelModal({
       new Set([...selectedMembers, currentUserEmail])
     );
 
-    var channelData = {
+    const channelData = {
       app_name: "admiral-field-portal",
       form_name: "ChannelsHiddenForm",
       payload: {
-        data: {
-          IDC: randomId,
-          ChannelName: channelName,
-          RecievedByC: finalMembers.join(","),
-          Message: "",
-          SentBy: currentUserEmail,
-        },
+        data: [
+          {
+            IDC: randomId,
+            ChannelName: channelName,
+            RecievedByC: finalMembers.join(","),
+            Message: "",
+            SentBy: currentUserEmail,
+          },
+        ],
       },
     };
 
     ZOHO.CREATOR.DATA.addRecords(channelData)
       .then((res) => {
-        console.log("✅ Channel created:", res);
         if (res.code === 3000) {
-          alert("Channel created successfully!");
           onChannelCreated?.({
             ID: randomId,
             ChannelName: channelName,
@@ -75,11 +79,11 @@ export default function ChannelModal({
           onSelectChat?.(`#${channelName}`);
           onClose();
         } else {
-          alert("Failed to create channel. Check console.");
+          alert("Create failed");
         }
       })
       .catch((err) => {
-        console.error("❌ Error creating channel:", err);
+        alert("Error: " + JSON.stringify(err));
       });
   }
 

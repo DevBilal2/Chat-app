@@ -54,6 +54,11 @@ export default function ChatContainer({
   };
   // ... (useEffect for message filtering remains the same) ...
   useEffect(() => {
+    if (!currentUser) return;
+
+    dispatch(fetchMessages(currentUser));
+  }, [activeChannel, currentUser]);
+  useEffect(() => {
     let filtered = [];
     if (activeChannel) {
       filtered = allMessages.filter(
@@ -293,7 +298,7 @@ export default function ChatContainer({
     ZOHO.CREATOR.DATA.updateRecordById(payload).then(() => {
       // Update state immediately
       setActiveChannel((prev) => ({ ...prev, RecievedByC: memberString }));
-
+      dispatch(fetchMessages(currentUser));
       if (action === "add") {
         alert("Member(s) added successfully!");
       } else if (action === "remove") {
