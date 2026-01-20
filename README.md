@@ -1,70 +1,115 @@
-# Getting Started with Create React App
+# Zoho Creator Team Chat App 💬
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A real-time internal communication application built using **Zoho Creator**, inspired by Slack.  
+This app enables teams to collaborate efficiently through channels, direct messages, and notifications — all within the Zoho ecosystem.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## 🚀 Features
 
-### `npm start`
+- 🗨️ **Channel-based messaging** (public & private channels)
+- 👤 **Direct messages** between users
+- 🔔 **@Mentions & notifications**
+- 📎 **File sharing** within conversations
+- 🕒 **Message timestamps & history**
+- 🔍 **Search messages & users**
+- 🔐 **Role-based access control**
+- 📱 **Mobile-friendly (Zoho Creator apps)**
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 🛠 Built With
 
-### `npm test`
+- **Zoho Creator**
+- **Deluge Scripting Language**
+- **Zoho Users & Roles**
+- **Zoho Creator Pages & Forms**
+- **Zoho Creator Workflows**
+- **Zoho OAuth / Connections** (if integrated externally)
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+---
 
-### `npm run build`
+## 📂 App Structure
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- **Forms**
+  - Users
+  - Channels
+  - Messages
+  - Attachments
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- **Pages**
+  - Chat Dashboard
+  - Channel View
+  - Direct Messages
+  - Notifications Panel
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- **Workflows**
+  - Message creation
+  - Mention detection (`@username`)
+  - Notification triggers
+  - Access validation
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## ⚙️ Setup Instructions
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+1. Log in to **Zoho Creator**
+2. Create a new application
+3. Import forms, pages, and workflows
+4. Configure user roles and permissions
+5. Enable email / in-app notifications
+6. Publish the app or assign users
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+---
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## 🔔 Notifications Logic
 
-## Learn More
+- Triggers on:
+  - New message
+  - @Mentions
+  - Direct messages
+- Supports:
+  - In-app notifications
+  - Email alerts
+  - App push notifications (if enabled)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+---
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## 🔐 Permissions & Security
 
-### Code Splitting
+- Role-based access for:
+  - Admins
+  - Team members
+- Private channels restricted to invited users
+- Creator-level authentication
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## 📈 Future Enhancements
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+- Message reactions (👍 ❤️ 😄)
+- Threaded replies
+- Message editing & deletion
+- Read receipts
+- External integrations (Zoho Cliq, CRM, Desk)
 
-### Making a Progressive Web App
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## 🤝 Contributing
 
-### Advanced Configuration
+Contributions are welcome.  
+Please fork the repository and submit a pull request with clear descriptions.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+---
 
-### Deployment
+## 📄 License
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+This project is for internal or client use.  
+License can be added based on deployment needs.
 
-### `npm run build` fails to minify
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 👤 Author
+
+**Bilal**  
+Zoho Developer | Low-Code Automation Specialist
