@@ -104,6 +104,8 @@ export default function MessageList({
   onMessageClick,
   onPinToggle,
   onDeleteMessage,
+  scrollToMessageId,
+  onScrollComplete,
 }) {
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [openDropdownId, setOpenDropdownId] = useState(null);
@@ -117,7 +119,7 @@ export default function MessageList({
 
   const dropdownRef = useRef(null);
   const scrollContainerRef = useRef(null);
-  const messageRefs = {};
+  const messageRefs = useRef({});
 
   const getSenderName = (email) => {
     if (email === currentUser) return "You";
@@ -128,7 +130,7 @@ export default function MessageList({
   const pinnedMessages = messages.filter((msg) => msg.Pin === true);
 
   const scrollToMessage = (msgId) => {
-    const el = messageRefs[msgId];
+    const el = messageRefs.current[msgId];
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       setHighlightedMessageId(msgId);
@@ -185,6 +187,55 @@ export default function MessageList({
       container.scrollTop = container.scrollHeight;
     }
   }, [messages]);
+
+  // Handle scrolling to a specific message from query params
+  useEffect(() => {
+    if (!scrollToMessageId || messages.length === 0) return;
+
+    // Try to find and scroll immediately, with minimal delay for DOM rendering
+    const tryScroll = () => {
+      const targetMessage = messages.find((msg) => {
+        // Try matching by ID field first (exact match)
+        if (msg.ID === scrollToMessageId || 
+            String(msg.ID) === String(scrollToMessageId)) {
+          return true;
+        }
+        
+        // Also try matching by MainID field if it exists
+        if (msg.MainID) {
+          if (msg.MainID === scrollToMessageId || 
+              String(msg.MainID) === String(scrollToMessageId)) {
+            return true;
+          }
+        }
+        
+        return false;
+      });
+
+      if (targetMessage) {
+        // Use requestAnimationFrame for immediate DOM update, then scroll
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            scrollToMessage(targetMessage.ID);
+            // Call onScrollComplete after scrolling
+            if (onScrollComplete) {
+              setTimeout(() => {
+                onScrollComplete();
+              }, 1500);
+            }
+          }, 50);
+        });
+      }
+    };
+
+    // Try immediately, and retry once after a short delay if needed
+    tryScroll();
+    const timeoutId = setTimeout(() => {
+      tryScroll();
+    }, 200);
+
+    return () => clearTimeout(timeoutId);
+  }, [scrollToMessageId, messages, onScrollComplete]);
 
   const sortedMessages = [...messages].sort((a, b) => {
     const timeA = a.Added_Time ? new Date(a.Added_Time).getTime() : 0;
@@ -352,7 +403,7 @@ export default function MessageList({
           return (
             <div
               key={msg.ID}
-              ref={(el) => (messageRefs[msg.ID] = el)}
+              ref={(el) => (messageRefs.current[msg.ID] = el)}
               className={`flex ${
                 isMine ? "justify-end" : "justify-start"
               } mb-1 ${isHighlighted ? "bg-yellow-100" : ""}`}

@@ -72,9 +72,9 @@ export default function ChatHeader({
   return (
     <div className="border-b bg-white shadow-sm p-1 flex justify-between items-center relative">
       {/* Left: Title + Members Button (if channel) */}
-      <div className="flex items-center space-x-4">
-        <span className="font-bold text-xl text-gray-800 truncate">
-          # {title}
+      <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+        <span className="font-bold text-base sm:text-lg md:text-xl text-gray-800 break-words min-w-0 max-w-full">
+          {isChannel ? '#' : '@'} {title}
         </span>
 
         {isChannel && (
@@ -89,7 +89,7 @@ export default function ChatHeader({
             </button>
 
             {membersOpen && (
-              <div className="absolute left-0 top-12 bg-white border border-gray-200 rounded-lg shadow-xl text-sm max-h-60 overflow-y-auto w-56 z-30">
+              <div className="absolute right-0 lg:left-0 lg:right-auto top-12 bg-white border border-gray-200 rounded-lg shadow-xl text-sm max-h-60 overflow-y-auto w-56 z-30">
                 {memberNames.length === 0 ? (
                   <div className="px-4 py-3 text-gray-400 italic">
                     No members in this channel

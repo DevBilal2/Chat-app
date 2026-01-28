@@ -1,5 +1,8 @@
 export default function Notification({ message, onClose }) {
-  if (!message) return null;
+  if (!message){
+    console.log("No message");
+    return null;
+  }
 
   // Color classes based on type
   console.log("Testing", message);

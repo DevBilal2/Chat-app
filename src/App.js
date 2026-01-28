@@ -18,9 +18,26 @@ export default function App() {
   // 🟢 Top notification banner
   const [topNotification, setTopNotification] = useState("");
   console.log("notification", topNotification);
+  
+  // Query params for deep linking
+  const [queryParams, setQueryParams] = useState(null);
+  const [scrollToMessageId, setScrollToMessageId] = useState(null);
+  
   // ========== Load Initial User ==========
+ 
+useEffect(() => {
+  ZOHO.CREATOR.UTIL.getQueryParams().then((response) => {
+    console.log("query params", response);
+    if (response && Object.keys(response).length > 0) {
+      setQueryParams(response);
+    }
+  }).catch((error) => {
+    console.error("Error getting query params:", error);
+  });
+}, []);
   useEffect(() => {
     ZOHO.CREATOR.UTIL.getInitParams().then((res) => {
+      
       console.log(res?.loginUser.includes("%40"));
       if (res?.loginUser.includes("%40")) {
         const decodedEmail = decodeURIComponent(res.loginUser);
@@ -89,6 +106,9 @@ export default function App() {
     setTopNotification(`${senderName} mentioned you: "${messageText}"`);
     setTimeout(() => setTopNotification(""), 4000); // auto-hide after 4s
   };
+  
+   
+  
 
   if (loading) {
     return (
@@ -121,6 +141,8 @@ export default function App() {
         onNotify={(targetId, senderName, messageText) =>
           handleNotify(targetId, senderName, messageText)
         }
+        queryParams={queryParams}
+        onScrollToMessage={setScrollToMessageId}
       />
       <ChatContainer
         allUsers={allUsers}
@@ -129,7 +151,8 @@ export default function App() {
         activePerson={activePerson}
         onMessagesUpdate={setChatMessages}
         setActiveChannel={setActiveChannel}
-        // Pass notification handler
+        scrollToMessageId={scrollToMessageId}
+        onScrollComplete={() => setScrollToMessageId(null)}
       />
     </div>
   );

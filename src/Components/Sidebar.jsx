@@ -1,6 +1,6 @@
 /* global ZOHO */
 import DOMPurify from "dompurify";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import ChannelModal from "./ChannelModal";
 import { fetchMessages, markHighlighted } from "../Store/MessageSlice";
@@ -13,6 +13,8 @@ export default function Sidebar({
   onNotify,
   setActiveChannel,
   activeChannel,
+  queryParams,
+  onScrollToMessage,
 }) {
   const dispatch = useDispatch();
   const messages = useSelector((state) => state.messages.all);
@@ -24,6 +26,7 @@ export default function Sidebar({
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [modalSearch, setModalSearch] = useState("");
   const [activeConversations, setActiveConversations] = useState([]);
+  const queryParamsProcessed = useRef(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -72,6 +75,64 @@ export default function Sidebar({
       setChannels([...channels]);
     }
   }, []);
+
+  // Handle query params to open channel and scroll to message
+  // Only process once when query params and channels are available
+  useEffect(() => {
+    // Skip if already processed, no query params, no channels, or no current user
+    if (
+      queryParamsProcessed.current ||
+      !queryParams?.QueryChannalName ||
+      channels.length === 0 ||
+      !currentUser
+    ) {
+      return;
+    }
+
+    // Find the channel by name
+    const targetChannel = channels.find(
+      (chan) => chan.ChannelName === queryParams.QueryChannalName
+    );
+
+    if (targetChannel) {
+      // Mark as processed to prevent re-processing
+      queryParamsProcessed.current = true;
+
+      // Use the same selection logic as handleChannelClick to ensure proper state
+      // This ensures activeConversation is cleared and channel is properly selected
+      onSelectChat(targetChannel);
+      setActiveConversation(null);
+      setActiveChannel(targetChannel);
+
+      // Mark highlighted messages as seen (same as handleChannelClick)
+      messages
+        .filter(
+          (msg) =>
+            msg.ChannelName === targetChannel.ChannelName && msg.Need_Highlight
+        )
+        .forEach((msg) => {
+          dispatch(markHighlighted({ id: msg.ID }));
+          markMessageInZoho(msg, "ChannelsHiddenForm_Report");
+        });
+
+      // Set the message ID to scroll to (use QueryMainID first, then QueryMassageID)
+      const messageId = queryParams.QueryMainID || queryParams.QueryMassageID;
+      if (messageId && onScrollToMessage) {
+        console.log("Setting scroll target message ID:", messageId);
+        // Set immediately - MessageList will handle waiting for messages to load
+        onScrollToMessage(messageId);
+      }
+    }
+  }, [
+    channels,
+    queryParams,
+    currentUser,
+    onSelectChat,
+    setActiveChannel,
+    onScrollToMessage,
+    messages,
+    dispatch,
+  ]);
   useEffect(() => {
     if (!activeChannel) return;
     const stillExists = channels.some((chan) => chan.ID === activeChannel.ID);
@@ -259,7 +320,7 @@ export default function Sidebar({
       report_name: reportName,
       id: msg.ID,
       payload: { data: { Already_Highlighted: "true" } },
-    }).then(() => console.log("Marked seen:", msg.ID));
+    })
   };
 
   const handleChannelClick = (channel) => {

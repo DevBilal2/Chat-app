@@ -18,6 +18,8 @@ export default function ChatContainer({
   allUsers,
   currentUser,
   setActiveChannel,
+  scrollToMessageId,
+  onScrollComplete,
 }) {
   const dispatch = useDispatch();
   const allMessages = useSelector((state) => state.messages.all);
@@ -143,6 +145,75 @@ export default function ChatContainer({
   // Removed local (optimistic) updates.
   // ===================================
 
+  // Extract mentioned user emails from message text
+  const extractMentionedEmails = (text) => {
+    if (!text || !allUsers.length) return "";
+    
+    const mentionedEmails = [];
+    
+    // First, extract plain text from HTML if needed (remove HTML tags)
+    let plainText = text;
+    if (text.includes('<') || text.includes('>')) {
+      // Create a temporary div to extract text content from HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = text;
+      plainText = tempDiv.textContent || tempDiv.innerText || text;
+    }
+    
+    // Extract all mentioned usernames from the text (including parentheses)
+    // Matches: @Preston, @Preston (Test Tech), @John Doe, @John Doe (Title)
+    const mentionRegex = /@([\w]+(?:\s+[\w]+)*(?:\s*\([^)]+\))?)/g;
+    let match;
+    const mentionedNames = [];
+    
+    mentionRegex.lastIndex = 0;
+    while ((match = mentionRegex.exec(plainText)) !== null) {
+      const mentionName = match[1].trim();
+      // Keep the full mention including parentheses (e.g., "Preston (Test Tech)")
+      if (mentionName && !mentionedNames.some(m => m.toLowerCase() === mentionName.toLowerCase())) {
+        mentionedNames.push(mentionName);
+      }
+    }
+    
+    // Match mentioned names to users and get their emails
+    mentionedNames.forEach((mentionName) => {
+      const mentionLower = mentionName.toLowerCase();
+      
+      const matchedUser = allUsers.find((user) => {
+        if (!user.Name || !user.Email) return false;
+        const userName = user.Name.trim().toLowerCase();
+        
+        // Exact match (handles "Preston" matching "Preston")
+        if (userName === mentionLower) return true;
+        
+        // Match if mention includes user's name (e.g., "Preston (Test Tech)" matches "Preston")
+        // Remove parentheses from mention for comparison
+        const mentionWithoutParens = mentionLower.replace(/\s*\([^)]+\)$/, '').trim();
+        if (userName === mentionWithoutParens) return true;
+        
+        // Check if mention is the start of user's name (e.g., "John" matches "John Doe")
+        if (userName.startsWith(mentionLower + " ")) return true;
+        
+        // Check if user's name starts with mention (e.g., "John Doe" matches "John")
+        if (mentionLower.startsWith(userName + " ")) return true;
+        
+        // Check if mention without parentheses starts with user's name
+        if (mentionWithoutParens.startsWith(userName + " ")) return true;
+        
+        return false;
+      });
+      
+      if (matchedUser && matchedUser.Email) {
+        // Avoid duplicate emails
+        if (!mentionedEmails.includes(matchedUser.Email)) {
+          mentionedEmails.push(matchedUser.Email);
+        }
+      }
+    });
+    
+    return mentionedEmails.join(",");
+  };
+
   const handleSendMessage = async ({ text, file, callback }) => {
     const messageText = text || "";
     const lowerText = messageText.toLowerCase();
@@ -154,6 +225,9 @@ export default function ChatContainer({
     );
     const Mentioned = mentionDetected ? "true" : "false";
     const Notified = "false";
+    
+    // Extract mentioned emails
+    const mentionedEmails = extractMentionedEmails(messageText);
 
     const isChannel = !!activeChannel;
     const formName = isChannel
@@ -169,6 +243,7 @@ export default function ChatContainer({
           RecievedByC: activeChannel.RecievedByC,
           Need_Highlight: Mentioned,
           Already_Highlighted: Notified,
+          Mentioned_Emails: mentionedEmails,
         }
       : {
           SentBy: currentUser,
@@ -176,6 +251,7 @@ export default function ChatContainer({
           Message: messageText,
           Need_Highlight: Mentioned,
           Already_Highlighted: Notified,
+          Mentioned_Emails: mentionedEmails,
         };
 
     // Add record to Zoho
@@ -334,12 +410,16 @@ export default function ChatContainer({
         allUsers={allUsers}
         onMessageClick={handleMessageClick}
         onPinToggle={handlePinToggle}
+        scrollToMessageId={scrollToMessageId}
+        onScrollComplete={onScrollComplete}
       />
 
       <MessageInput
         onSend={handleSendMessage}
         members={allUsers}
         currentUser={currentUser}
+        activeChannel={activeChannel}
+        onAddMember={handleAddMember}
       />
     </div>
   );

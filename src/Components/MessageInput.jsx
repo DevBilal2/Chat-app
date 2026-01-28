@@ -16,6 +16,7 @@ import {
   FiType,
   FiCode,
   FiSmile,
+  FiUsers,
 } from "react-icons/fi";
 
 // Simple list of emojis for a basic picker
@@ -58,7 +59,7 @@ const Loader = () => (
     ></path>
   </svg>
 );
-export default function MessageInput({ onSend, members, currentUser }) {
+export default function MessageInput({ onSend, members, currentUser, activeChannel, onAddMember }) {
   const editorRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -79,6 +80,9 @@ export default function MessageInput({ onSend, members, currentUser }) {
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioURL, setAudioURL] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [pendingMentionedUsers, setPendingMentionedUsers] = useState([]);
+  const [pendingSendData, setPendingSendData] = useState(null);
   const dispatch = useDispatch();
 
   // Timer for recording
@@ -147,9 +151,11 @@ export default function MessageInput({ onSend, members, currentUser }) {
     if (!plain) return "";
 
     const escapeHtml = (str) =>
-      str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); // --- 🚀 FIX: New regex to capture @ followed by multiple word characters and spaces --- // It looks for @ followed by at least one word character, optionally followed by (space + one or more word characters). // This handles names like "@John Doe" while stopping at punctuation or a double space.
-
-    const mentionRegex = /(\s|^)(@[\w]+(?:\s[\w]+)*)/g;
+      str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); 
+    
+    // Updated regex to capture @mentions including text in parentheses
+    // Matches: @Preston, @Preston (Test Tech), @John Doe, @John Doe (Title)
+    const mentionRegex = /(\s|^)(@[\w]+(?:\s[\w]+)*(?:\s*\([^)]+\))?)/g;
 
     return plain.replace(mentionRegex, (match, leadingSpace, namePart) => {
       const escapedMention = escapeHtml(namePart.trim());
@@ -298,15 +304,157 @@ export default function MessageInput({ onSend, members, currentUser }) {
     resetVoiceState();
   };
 
+  // Extract mentions from text (e.g., "@John Doe" or "@John")
+  // Works with both plain text and HTML content
+  const extractMentions = (text, htmlContent = null) => {
+    const mentions = [];
+    
+    // First, try to extract from HTML if available (mentions are wrapped in spans with data-mention)
+    if (htmlContent && editorRef.current) {
+      try {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        const mentionSpans = tempDiv.querySelectorAll('[data-mention]');
+        mentionSpans.forEach((span) => {
+          const mentionText = span.textContent.trim();
+          if (mentionText.startsWith('@')) {
+            const name = mentionText.substring(1).trim();
+            if (name && !mentions.some(m => m.toLowerCase() === name.toLowerCase())) {
+              mentions.push(name);
+            }
+          }
+        });
+      } catch (e) {
+        console.error('Error parsing HTML for mentions:', e);
+      }
+    }
+    
+    // Also extract from plain text (handles cases where HTML parsing might miss something)
+    // This regex matches @ followed by word characters and spaces, even when surrounded by other text
+    // Updated to handle mentions in the middle of sentences
+    const mentionRegex = /@([\w]+(?:\s+[\w]+)*)/g;
+    let match;
+    const textToSearch = text || '';
+    // Reset regex lastIndex to avoid issues with global regex
+    mentionRegex.lastIndex = 0;
+    while ((match = mentionRegex.exec(textToSearch)) !== null) {
+      const mentionName = match[1].trim();
+      // Avoid duplicates
+      if (mentionName && !mentions.some(m => m.toLowerCase() === mentionName.toLowerCase())) {
+        mentions.push(mentionName);
+      }
+    }
+    
+    return mentions;
+  };
+
+  // Check if mentioned users are in the channel
+  const checkMentionedUsersInChannel = (plainText, htmlText = null) => {
+    if (!activeChannel || !activeChannel.RecievedByC) return [];
+    
+    const mentionedNames = extractMentions(plainText, htmlText);
+    if (mentionedNames.length === 0) return [];
+
+    const channelMemberEmails = activeChannel.RecievedByC
+      .split(",")
+      .map((e) => e.trim().toLowerCase());
+
+    const mentionedUsersNotInChannel = members.filter((user) => {
+      if (!user.Name || !user.Email) return false;
+      
+      const userName = user.Name.trim().toLowerCase();
+      // Check if this user is mentioned (case-insensitive)
+      const isMentioned = mentionedNames.some((mention) => {
+        const mentionLower = mention.trim().toLowerCase();
+        const userNameLower = userName.toLowerCase();
+        
+        // Exact match (most reliable)
+        if (userNameLower === mentionLower) return true;
+        
+        // Check if the mention is the start of the user's name
+        // e.g., "John" should match "John Doe"
+        if (userNameLower.startsWith(mentionLower + " ")) return true;
+        
+        // Check if the user's name starts with the mention
+        // e.g., "John Doe" should match "John"
+        if (mentionLower.startsWith(userNameLower + " ")) return true;
+        
+        return false;
+      });
+      
+      const isInChannel = channelMemberEmails.includes(user.Email.trim().toLowerCase());
+      return isMentioned && !isInChannel;
+    });
+
+    return mentionedUsersNotInChannel;
+  };
+
+  const proceedWithSend = () => {
+    if (!pendingSendData) return;
+
+    setIsSending(true);
+    const { delugeText, file } = pendingSendData;
+
+    onSend({
+      text: delugeText,
+      file,
+      callback: () => {
+        setTimeout(() => dispatch(fetchMessages(currentUser)), 300);
+        setIsSending(false);
+      },
+    });
+
+    editorRef.current.innerHTML = "";
+    setAttachedFile(null);
+    setCurrentText("");
+    setShowSuggestions(false);
+    setTagStartIndex(-1);
+    setPendingSendData(null);
+    setPendingMentionedUsers([]);
+    setShowAddMemberModal(false);
+  };
+
+  const handleAddAndSend = () => {
+    if (pendingMentionedUsers.length > 0 && onAddMember) {
+      const emailsToAdd = pendingMentionedUsers.map((u) => u.Email);
+      onAddMember(emailsToAdd, "add");
+      // Wait a bit for the member to be added, then send
+      setTimeout(() => {
+        proceedWithSend();
+      }, 500);
+    } else {
+      proceedWithSend();
+    }
+  };
+
   const handleSend = () => {
-    const plainText = editorRef.current.innerText.trim();
-    const htmlText = editorRef.current.innerHTML.trim();
+    const plainText = editorRef.current?.innerText?.trim() || "";
+    const htmlText = editorRef.current?.innerHTML?.trim() || "";
     const file = attachedFile;
     const audio = audioBlob;
 
     if (!plainText && !file && !audio) return;
 
     if (audioBlob && isPreview) return sendAudio();
+
+    // Check for mentioned users not in channel (only for channels)
+    if (activeChannel && plainText) {
+      // Extract mentions from both plain text and HTML to be thorough
+      const mentionedUsersNotInChannel = checkMentionedUsersInChannel(plainText, htmlText);
+      
+      if (mentionedUsersNotInChannel.length > 0) {
+        // Store the send data and show modal
+        const delugeText = htmlText.replace(/([\p{Emoji}])/gu, (match) =>
+          emojiToDeluge(match)
+        );
+        setPendingSendData({ delugeText, file });
+        setPendingMentionedUsers(mentionedUsersNotInChannel);
+        setShowAddMemberModal(true);
+        return;
+      }
+    }
+
+    // No mentions or all mentioned users are in channel, proceed normally
     setIsSending(true);
     const delugeText = htmlText.replace(/([\p{Emoji}])/gu, (match) =>
       emojiToDeluge(match)
@@ -601,6 +749,62 @@ export default function MessageInput({ onSend, members, currentUser }) {
           </div>
         )}
       </div>
+
+      {/* Add Member Confirmation Modal */}
+      {showAddMemberModal && pendingMentionedUsers.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm sm:max-w-md p-4 sm:p-5 md:p-6 relative max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-lg sm:text-xl mb-3 sm:mb-4 text-gray-800">
+              Add Members to Channel?
+            </h3>
+            <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4">
+              You mentioned {pendingMentionedUsers.length === 1 ? "a user" : "users"} who {pendingMentionedUsers.length === 1 ? "is" : "are"} not in this channel:
+            </p>
+            <div className="mb-3 sm:mb-4 max-h-40 sm:max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2 sm:p-3 bg-gray-50">
+              {pendingMentionedUsers.map((user) => (
+                <div
+                  key={user.Email || user.ID || user.Name}
+                  className="px-2 py-2 text-gray-700 flex items-center space-x-2 text-sm sm:text-base"
+                >
+                  <FiUsers className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <span className="font-medium truncate">{user.Name}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4">
+              Would you like to add {pendingMentionedUsers.length === 1 ? "this person" : "these people"} to the channel?
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <button
+                onClick={handleAddAndSend}
+                className="flex-1 font-semibold px-4 py-2.5 sm:py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 transition-colors text-sm sm:text-base touch-manipulation"
+              >
+                Yes, Add & Send
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddMemberModal(false);
+                  setPendingMentionedUsers([]);
+                  setPendingSendData(null);
+                }}
+                className="flex-1 font-semibold px-4 py-2.5 sm:py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 active:bg-gray-400 transition-colors text-sm sm:text-base touch-manipulation"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddMemberModal(false);
+                  setPendingMentionedUsers([]);
+                  proceedWithSend();
+                }}
+                className="flex-1 font-semibold px-4 py-2.5 sm:py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 active:bg-gray-700 transition-colors text-sm sm:text-base touch-manipulation"
+              >
+                Send Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         [data-placeholder]:empty:not(:focus)::before {
