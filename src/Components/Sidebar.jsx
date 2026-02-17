@@ -76,62 +76,118 @@ export default function Sidebar({
     }
   }, []);
 
-  // Handle query params to open channel and scroll to message
-  // Only process once when query params and channels are available
+  // Handle query params to open channel/person and scroll to message
+  // Only process once when query params are available
   useEffect(() => {
-    // Skip if already processed, no query params, no channels, or no current user
+    // Skip if already processed, no query params, or no current user
     if (
       queryParamsProcessed.current ||
-      !queryParams?.QueryChannalName ||
-      channels.length === 0 ||
-      !currentUser
+      !queryParams ||
+      !currentUser ||
+      (!queryParams.QueryChannalName && !queryParams.QueryPersonEmail)
     ) {
       return;
     }
 
-    // Find the channel by name
-    const targetChannel = channels.find(
-      (chan) => chan.ChannelName === queryParams.QueryChannalName
-    );
+    // Handle Channel query params
+    if (queryParams.QueryChannalName && channels.length > 0) {
+      // Find the channel by name
+      const targetChannel = channels.find(
+        (chan) => chan.ChannelName === queryParams.QueryChannalName
+      );
 
-    if (targetChannel) {
-      // Mark as processed to prevent re-processing
-      queryParamsProcessed.current = true;
+      if (targetChannel) {
+        // Mark as processed to prevent re-processing
+        queryParamsProcessed.current = true;
 
-      // Use the same selection logic as handleChannelClick to ensure proper state
-      // This ensures activeConversation is cleared and channel is properly selected
-      onSelectChat(targetChannel);
-      setActiveConversation(null);
-      setActiveChannel(targetChannel);
+        // Use the same selection logic as handleChannelClick to ensure proper state
+        // This ensures activeConversation is cleared and channel is properly selected
+        onSelectChat(targetChannel);
+        setActiveConversation(null);
+        setActiveChannel(targetChannel);
 
-      // Mark highlighted messages as seen (same as handleChannelClick)
-      messages
-        .filter(
-          (msg) =>
-            msg.ChannelName === targetChannel.ChannelName && msg.Need_Highlight
-        )
-        .forEach((msg) => {
-          dispatch(markHighlighted({ id: msg.ID }));
-          markMessageInZoho(msg, "ChannelsHiddenForm_Report");
-        });
+        // Mark highlighted messages as seen (same as handleChannelClick)
+        messages
+          .filter(
+            (msg) =>
+              msg.ChannelName === targetChannel.ChannelName && msg.Need_Highlight
+          )
+          .forEach((msg) => {
+            dispatch(markHighlighted({ id: msg.ID }));
+            markMessageInZoho(msg, "ChannelsHiddenForm_Report");
+          });
 
-      // Set the message ID to scroll to (use QueryMainID first, then QueryMassageID)
-      const messageId = queryParams.QueryMainID || queryParams.QueryMassageID;
-      if (messageId && onScrollToMessage) {
-        console.log("Setting scroll target message ID:", messageId);
-        // Set immediately - MessageList will handle waiting for messages to load
-        onScrollToMessage(messageId);
+        // Set the message ID to scroll to (use QueryMainID first, then QueryMassageID)
+        const messageId = queryParams.QueryMainID || queryParams.QueryMassageID;
+        if (messageId && onScrollToMessage) {
+          console.log("Setting scroll target message ID:", messageId);
+          // Set immediately - MessageList will handle waiting for messages to load
+          onScrollToMessage(messageId);
+        }
+      }
+    }
+    // Handle Person-to-Person conversation query params
+    else if (queryParams.QueryPersonEmail && allUsers.length > 0) {
+      const myEmail = currentUser?.toLowerCase();
+      const targetPersonEmail = queryParams.QueryPersonEmail.toLowerCase().trim();
+      
+      // Find the person by email
+      const targetPerson = allUsers.find(
+        (user) => user.Email?.toLowerCase() === targetPersonEmail
+      );
+
+      if (targetPerson) {
+        // Mark as processed to prevent re-processing
+        queryParamsProcessed.current = true;
+
+        // Use the same selection logic as handlePersonClick to ensure proper state
+        // This ensures activeChannel is cleared and person is properly selected
+        onSelectPerson(targetPerson);
+        setActiveConversation(targetPerson);
+        setActiveChannel(null);
+
+        // Add to conversation list if not already there
+        if (!activeConversations.some((u) => u.Email === targetPerson.Email)) {
+          setActiveConversations((prev) => [targetPerson, ...prev]);
+        }
+
+        // Mark highlighted messages as seen (same as handlePersonClick)
+        messages
+          .filter(
+            (msg) =>
+              !msg.ChannelName &&
+              ((msg.SentBy?.toLowerCase() === targetPerson.Email.toLowerCase() &&
+                msg.RecievedBy?.toLowerCase() === myEmail) ||
+                (msg.RecievedBy?.toLowerCase() === targetPerson.Email.toLowerCase() &&
+                  msg.SentBy?.toLowerCase() === myEmail)) &&
+              msg.Need_Highlight
+          )
+          .forEach((msg) => {
+            dispatch(markHighlighted({ id: msg.ID }));
+            markMessageInZoho(msg, "PersonToPersonHiddenForm_Report");
+          });
+
+        // Set the message ID to scroll to (use QueryPersonMainID first, then QueryMassageID)
+        const messageId = queryParams.QueryPersonMainID || queryParams.QueryMassageID;
+        if (messageId && onScrollToMessage) {
+          console.log("Setting scroll target message ID for person:", messageId);
+          // Set immediately - MessageList will handle waiting for messages to load
+          onScrollToMessage(messageId);
+        }
       }
     }
   }, [
     channels,
     queryParams,
     currentUser,
+    allUsers,
     onSelectChat,
+    onSelectPerson,
     setActiveChannel,
     onScrollToMessage,
     messages,
     dispatch,
+    activeConversations,
   ]);
   useEffect(() => {
     if (!activeChannel) return;
