@@ -121,7 +121,9 @@ export default function MessageList({
   const scrollContainerRef = useRef(null);
   const messageRefs = useRef({});
 
-  const getSenderName = (email) => {
+  const getSenderName = (email, botName = null) => {
+    // If botName is provided and SentBy is empty, use bot name
+    if (!email && botName) return botName;
     if (email === currentUser) return "You";
     const user = allUsers.find((u) => u.Email === email);
     return user?.Name || email || "Unknown";
@@ -255,6 +257,10 @@ export default function MessageList({
     if (!text) return null;
 
     var decodedText = decodeDelugeChars(text);
+    
+    // Convert newlines to <br> tags (handles both \n and \r\n)
+    decodedText = decodedText.replace(/\r?\n/g, '<br>');
+    
     // const mentionRegex = /@([a-zA-Z0-9_\s-]+)(?=\s|[,.?!:;]|$)/g;
     // decodedText = decodedText.replace(
     //   mentionRegex,
@@ -283,13 +289,15 @@ export default function MessageList({
         "code",
         "blockquote",
         "span",
+        "br",
       ],
       ALLOWED_ATTR: ["href", "target", "class", "style", "data-mention-list"],
     });
 
     return (
       <div
-        className="break-words text-left"
+        className="break-words text-left min-w-0 max-w-full"
+        style={{ overflowWrap: 'anywhere' }}
         dangerouslySetInnerHTML={{ __html: cleanHtml }}
       />
     );
@@ -360,7 +368,7 @@ export default function MessageList({
               <div className="font-medium flex-1 flex items-center min-w-0">
                 {/* Sender Name with light styling */}
                 <span className="text-xs font-semibold text-gray-600 mr-2 flex-shrink-0">
-                  {getSenderName(msg.SentBy)}:
+                  {getSenderName(msg.SentBy, msg.BotName)}:
                 </span>
                 {/* Message Content */}
                 <div className="truncate min-w-0">
@@ -391,7 +399,9 @@ export default function MessageList({
       >
         {[...sortedMessages].reverse().map((msg) => {
           if (!msg.Message && !msg.File_upload) return null;
-          const isMine = msg.SentBy === currentUser;
+          const isBotMessage = (msg.SentBy === "" || !msg.SentBy) && 
+                               (msg.BotCheck === true || msg.BotCheck === "true" || String(msg.BotCheck).toLowerCase() === "true");
+          const isMine = msg.SentBy === currentUser && !isBotMessage;
           const isHighlighted = highlightedMessageId === msg.ID;
 
           const fileData = getCreatorFileUrl(msg.File_upload);
@@ -455,7 +465,7 @@ export default function MessageList({
                 )}
 
                 <div
-                  className={`relative max-w-xs px-3 py-0.5 rounded-lg shadow ${
+                  className={`relative max-w-xs min-w-0 px-3 py-0.5 rounded-lg shadow ${
                     isMine
                       ? "bg-[#5F9EA0] text-white rounded-br-none text-right"
                       : "bg-gray-200 text-gray-800 rounded-bl-none text-left"
@@ -463,7 +473,7 @@ export default function MessageList({
                 >
                   {!isMine && (
                     <div className="text-[10px] opacity-70 mb-1 flex justify-between items-center">
-                      <span>{getSenderName(msg.SentBy)}</span>
+                      <span>{getSenderName(msg.SentBy, msg.BotName)}</span>
                       {msg.Already_Highlighted === "true" && (
                         <span
                           className={`w-2 h-2 bg-yellow-400 rounded-full ${
@@ -474,7 +484,7 @@ export default function MessageList({
                     </div>
                   )}
 
-                  <div className="break-words text-left">
+                  <div className="break-words text-left min-w-0" style={{ overflowWrap: 'anywhere' }}>
                     {fileUrl && (
                       <div className="mt-1 relative">
                         {isImage ? (

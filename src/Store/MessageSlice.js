@@ -28,19 +28,25 @@ export const fetchMessages = createAsyncThunk(
     }
 
     try {
-      // Fetch person-to-person messages
+      // Fetch person-to-person messages (including bot messages)
+      // Fetch all messages where user is sender, receiver, or bot messages where user is receiver
       const personRes = await ZOHO.CREATOR.DATA.getRecords({
         app_name: "admiral-field-portal",
         report_name: "PersonToPersonHiddenForm_Report",
         criteria: `(SentBy == "${currentUser}" || RecievedBy == "${currentUser}")`,
       });
 
-      personMessages = (personRes?.data || []).map((msg) => ({
-        ...msg,
-        Need_Highlight: msg.Need_Highlight === "true",
-        Already_Highlighted: msg.Already_Highlighted === "true",
-        Pin: msg.Pin === "true",
-      }));
+      personMessages = (personRes?.data || []).map((msg) => {
+        // Normalize BotCheck to handle both boolean and string
+        const botCheck = msg.BotCheck === true || msg.BotCheck === "true" || String(msg.BotCheck || "").toLowerCase() === "true";
+        return {
+          ...msg,
+          Need_Highlight: msg.Need_Highlight === "true",
+          Already_Highlighted: msg.Already_Highlighted === "true",
+          Pin: msg.Pin === "true",
+          BotCheck: botCheck,
+        };
+      });
     } catch (error) {
       // Check if it's the "no records found" error (code 9280)
       if (error?.code === 9280) {

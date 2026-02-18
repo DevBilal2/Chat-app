@@ -68,10 +68,29 @@ export default function ChatContainer({
       );
     } else if (activePerson) {
       filtered = allMessages.filter(
-        (msg) =>
-          (msg.SentBy === currentUser &&
-            msg.RecievedBy === activePerson.Email) ||
-          (msg.SentBy === activePerson.Email && msg.RecievedBy === currentUser)
+        (msg) => {
+          // Regular user messages
+          if ((msg.SentBy === currentUser &&
+               msg.RecievedBy === activePerson.Email) ||
+              (msg.SentBy === activePerson.Email && msg.RecievedBy === currentUser)) {
+            return true;
+          }
+          
+          // Bot messages - if activePerson is a bot
+          if (activePerson.IsBot) {
+            const isBotMessage = msg.SentBy === "" || !msg.SentBy;
+            const botCheck = msg.BotCheck === true || msg.BotCheck === "true" || String(msg.BotCheck).toLowerCase() === "true";
+            
+            if (isBotMessage && 
+                botCheck &&
+                msg.BotName === activePerson.Name &&
+                msg.RecievedBy === currentUser) {
+              return true;
+            }
+          }
+          
+          return false;
+        }
       );
     }
 
@@ -319,7 +338,9 @@ export default function ChatContainer({
 
   const chatTitle = activeChannel
     ? activeChannel.ChannelName
-    : activePerson?.Name || "Unknown User";
+    : activePerson?.IsBot 
+      ? activePerson.Name 
+      : activePerson?.Name || "Unknown User";
 
   // ... (filteredMessages and handleAddMember functions remain the same) ...
   const filteredMessages = combinedMessages.filter((msg) => {
@@ -397,7 +418,7 @@ export default function ChatContainer({
 
       <ChatHeader
         title={chatTitle}
-        members={activeChannel?.RecievedByC || activePerson.Email}
+        members={activeChannel?.RecievedByC || (activePerson?.IsBot ? "" : activePerson?.Email)}
         allUsers={allUsers}
         onAddMember={handleAddMember}
         currentUser={currentUser}
@@ -414,13 +435,20 @@ export default function ChatContainer({
         onScrollComplete={onScrollComplete}
       />
 
-      <MessageInput
-        onSend={handleSendMessage}
-        members={allUsers}
-        currentUser={currentUser}
-        activeChannel={activeChannel}
-        onAddMember={handleAddMember}
-      />
+      {!activePerson?.IsBot && (
+        <MessageInput
+          onSend={handleSendMessage}
+          members={allUsers}
+          currentUser={currentUser}
+          activeChannel={activeChannel}
+          onAddMember={handleAddMember}
+        />
+      )}
+      {activePerson?.IsBot && (
+        <div className="border-t bg-gray-100 p-4 text-center text-gray-500 text-sm">
+          This is a bot conversation. You can only receive messages, not send them.
+        </div>
+      )}
     </div>
   );
 }

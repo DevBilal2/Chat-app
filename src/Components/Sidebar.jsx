@@ -27,6 +27,7 @@ export default function Sidebar({
   const [modalSearch, setModalSearch] = useState("");
   const [activeConversations, setActiveConversations] = useState([]);
   const queryParamsProcessed = useRef(false);
+  const processedNotificationIds = useRef(new Set());
 
   useEffect(() => {
     if (!currentUser) return;
@@ -110,7 +111,9 @@ export default function Sidebar({
         messages
           .filter(
             (msg) =>
-              msg.ChannelName === targetChannel.ChannelName && msg.Need_Highlight
+              msg.ChannelName === targetChannel.ChannelName && 
+              msg.Need_Highlight &&
+              !msg.Already_Highlighted
           )
           .forEach((msg) => {
             dispatch(markHighlighted({ id: msg.ID }));
@@ -160,7 +163,8 @@ export default function Sidebar({
                 msg.RecievedBy?.toLowerCase() === myEmail) ||
                 (msg.RecievedBy?.toLowerCase() === targetPerson.Email.toLowerCase() &&
                   msg.SentBy?.toLowerCase() === myEmail)) &&
-              msg.Need_Highlight
+              msg.Need_Highlight &&
+              !msg.Already_Highlighted
           )
           .forEach((msg) => {
             dispatch(markHighlighted({ id: msg.ID }));
@@ -235,8 +239,9 @@ export default function Sidebar({
     return () => clearInterval(interval);
   }, [currentUser, dispatch]);
 
-  // Users you’ve already messaged
+  // Users you've already messaged + Bot conversations
   useEffect(() => {
+    // Regular user conversations
     const messaged = allUsers.filter((user) =>
       messages.some(
         (msg) =>
@@ -248,20 +253,53 @@ export default function Sidebar({
       )
     );
 
-    // Merge messaged users with manually added ones
-    setActiveConversations((prev) => {
-      const combined = [...prev];
-      messaged.forEach((u) => {
-        if (!combined.some((c) => c.Email === u.Email)) {
-          combined.push(u);
-        }
+    // Bot conversations - create virtual user objects for each unique BotName
+    const botConversations = [];
+    const uniqueBotNames = new Set();
+    
+    messages.forEach((msg) => {
+      // Check if it's a bot message (BotCheck can be boolean true or string "true")
+      const isBotMessage = !msg.SentBy || msg.SentBy === "" || String(msg.SentBy || "").trim() === "";
+      const botCheck = msg.BotCheck === true || msg.BotCheck === "true" || String(msg.BotCheck || "").toLowerCase() === "true";
+      
+      if (!msg.ChannelName && 
+          isBotMessage && 
+          botCheck && 
+          msg.BotName &&
+          msg.RecievedBy?.toLowerCase() === currentUser.toLowerCase()) {
+        console.log("Found bot message:", msg.BotName, "BotCheck:", msg.BotCheck, "SentBy:", msg.SentBy);
+        uniqueBotNames.add(msg.BotName);
+      }
+    });
+    
+    console.log("Bot conversations found:", Array.from(uniqueBotNames));
+
+    uniqueBotNames.forEach((botName) => {
+      // Create a virtual user object for the bot
+      botConversations.push({
+        ID: `bot-${botName}`,
+        Email: `bot-${botName}@bot`,
+        Name: botName,
+        IsBot: true
       });
-      return combined;
+    });
+
+    // Merge regular users and bot conversations
+    setActiveConversations((prev) => {
+      const combined = [...messaged, ...botConversations];
+      // Remove duplicates based on Email or bot Name
+      const unique = combined.filter((item, index, self) =>
+        index === self.findIndex((t) => 
+          (t.Email === item.Email) || 
+          (t.IsBot && item.IsBot && t.Name === item.Name)
+        )
+      );
+      return unique;
     });
   }, [messages, allUsers, currentUser]);
 
   const filteredUsers = activeConversations.filter((user) =>
-    user.Name.toLowerCase().includes(sidebarSearch.toLowerCase())
+    user.Name?.toLowerCase().includes(sidebarSearch.toLowerCase())
   );
 
   // Compute unread highlights
@@ -287,13 +325,22 @@ export default function Sidebar({
     }
 
     if (!msg.ChannelName) {
-      const isMine =
-        msg.SentBy?.toLowerCase() === myEmail ||
-        msg.RecievedBy?.toLowerCase() === myEmail;
-      if (isMine) {
-        const otherPerson =
-          msg.SentBy?.toLowerCase() === myEmail ? msg.RecievedBy : msg.SentBy;
-        if (otherPerson) unreadHighlights[otherPerson] = true;
+      // For bot messages, use BotName for highlighting
+      const isBotMessage = msg.SentBy === "" || !msg.SentBy;
+      const botCheck = msg.BotCheck === true || msg.BotCheck === "true" || String(msg.BotCheck).toLowerCase() === "true";
+      
+      if (isBotMessage && botCheck && msg.BotName) {
+        const botEmail = `bot-${msg.BotName}@bot`;
+        unreadHighlights[botEmail] = true;
+      } else {
+        const isMine =
+          msg.SentBy?.toLowerCase() === myEmail ||
+          msg.RecievedBy?.toLowerCase() === myEmail;
+        if (isMine) {
+          const otherPerson =
+            msg.SentBy?.toLowerCase() === myEmail ? msg.RecievedBy : msg.SentBy;
+          if (otherPerson) unreadHighlights[otherPerson] = true;
+        }
       }
     }
   });
@@ -304,9 +351,14 @@ export default function Sidebar({
       const needHighlight = String(msg.Need_Highlight).toLowerCase() === "true";
       const appNotif = String(msg.App_Notification).toLowerCase() === "true";
       const alreadyHighlighted =
-        String(msg.Already_Highlighted).toLowerCase() === "true";
+        String(msg.Already_Highlighted).toLowerCase() === "true" ||
+        msg.Already_Highlighted === true;
 
+      // Skip if already processed or not needed
       if (!needHighlight || appNotif || alreadyHighlighted) return;
+      
+      // Skip if we've already processed this message ID in this session
+      if (processedNotificationIds.current.has(msg.ID)) return;
 
       let shouldNotify = false;
       const messageText = DOMPurify.sanitize(msg.Message || "", {
@@ -320,7 +372,7 @@ export default function Sidebar({
       }
 
       if (!msg.ChannelName) {
-        // Notification for Direct Messages (DM)
+        // Notification for Direct Messages (DM) - including bot messages
         const isRecipient = msg.RecievedBy?.toLowerCase() === myEmail;
         if (isRecipient) shouldNotify = true;
       }
@@ -332,20 +384,27 @@ export default function Sidebar({
           // 1️⃣ Determine if message is channel or direct
           const targetId =
             msg.ChannelName ||
-            (msg.SentBy?.toLowerCase() === myEmail
+            (msg.SentBy === "" && msg.BotCheck === true && msg.BotName
+              ? `bot-${msg.BotName}@bot`
+              : msg.SentBy?.toLowerCase() === myEmail
               ? msg.RecievedBy
               : msg.SentBy); // 2️⃣ Get email of actual sender (not you)
 
-          const senderEmail =
-            msg.SentBy?.toLowerCase() === myEmail
-              ? msg.RecievedBy?.toLowerCase()
-              : msg.SentBy?.toLowerCase(); // 3️⃣ Find sender name from allUsers
+          // For bot messages, use BotName as sender name
+          const senderName = msg.SentBy === "" && msg.BotCheck === true && msg.BotName
+            ? msg.BotName
+            : (() => {
+                const senderEmail =
+                  msg.SentBy?.toLowerCase() === myEmail
+                    ? msg.RecievedBy?.toLowerCase()
+                    : msg.SentBy?.toLowerCase(); // 3️⃣ Find sender name from allUsers
 
-          const userData = allUsers.find(
-            (u) => u.Email?.toLowerCase() === senderEmail
-          ); // 4️⃣ Use full name → fallback to email if not found
+                const userData = allUsers.find(
+                  (u) => u.Email?.toLowerCase() === senderEmail
+                ); // 4️⃣ Use full name → fallback to email if not found
 
-          const senderName = userData?.Name || senderEmail || "You"; // Get original message text
+                return userData?.Name || senderEmail || "You";
+              })(); // Get original message text
 
           const originalMessageText = DOMPurify.sanitize(msg.Message || "", {
             ALLOWED_TAGS: [],
@@ -360,6 +419,9 @@ export default function Sidebar({
           ? "ChannelsHiddenForm_Report"
           : "PersonToPersonHiddenForm_Report";
 
+        // Mark as processed to prevent duplicate notifications
+        processedNotificationIds.current.add(msg.ID);
+        
         ZOHO.CREATOR.DATA.updateRecordById({
           app_name: "admiral-field-portal",
           report_name: reportName,
@@ -389,7 +451,10 @@ export default function Sidebar({
 
     messages
       .filter(
-        (msg) => msg.ChannelName === channel.ChannelName && msg.Need_Highlight
+        (msg) => 
+          msg.ChannelName === channel.ChannelName && 
+          msg.Need_Highlight &&
+          !msg.Already_Highlighted
       )
       .forEach((msg) => {
         dispatch(markHighlighted({ id: msg.ID }));
@@ -415,7 +480,8 @@ export default function Sidebar({
             msg.RecievedBy?.toLowerCase() === myEmail) ||
             (msg.RecievedBy?.toLowerCase() === person.Email.toLowerCase() &&
               msg.SentBy?.toLowerCase() === myEmail)) &&
-          msg.Need_Highlight
+          msg.Need_Highlight &&
+          !msg.Already_Highlighted
       )
       .forEach((msg) => {
         dispatch(markHighlighted({ id: msg.ID }));
@@ -583,7 +649,7 @@ export default function Sidebar({
                         : "hover:bg-[#404249]"
                     }`}
                   >
-                    <span>@{user.Name}</span>
+                    <span>{user.IsBot ? `🤖 ${user.Name}` : `@${user.Name}`}</span>
                     {hasHighlight && (
                       <span className="ml-2 w-2 h-2 bg-yellow-400 rounded-full"></span>
                     )}
