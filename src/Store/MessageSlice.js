@@ -2,34 +2,67 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 
 /** Fetch all messages from Zoho */
+/** Fetch all messages from Zoho */
 export const fetchMessages = createAsyncThunk(
   "messages/fetchMessages",
   async (currentUser) => {
-    const channelsRes = await ZOHO.CREATOR.DATA.getRecords({
-      app_name: "admiral-field-portal",
-      report_name: "ChannelsHiddenForm_Report",
-    });
-    const personRes = await ZOHO.CREATOR.DATA.getRecords({
-      app_name: "admiral-field-portal",
-      report_name: "PersonToPersonHiddenForm_Report",
-      criteria: `(SentBy == "${currentUser}" || RecievedBy == "${currentUser}")`,
-    });
+    let channelMessages = [];
+    let personMessages = [];
 
-    const allMsgs = [
-      ...channelsRes.data.map((msg) => ({
+    try {
+      // Fetch channel messages
+      const channelsRes = await ZOHO.CREATOR.DATA.getRecords({
+        app_name: "admiral-field-portal",
+        report_name: "ChannelsHiddenForm_Report",
+      });
+
+      channelMessages = (channelsRes?.data || []).map((msg) => ({
         ...msg,
         Need_Highlight: msg.Need_Highlight === "true",
         Already_Highlighted: msg.Already_Highlighted === "true",
         Pin: msg.Pin === "true",
-      })),
-      ...personRes.data.map((msg) => ({
+      }));
+    } catch (error) {
+      console.warn("Error fetching channel messages:", error);
+      // Continue with empty array for channel messages
+    }
+
+    try {
+      // Fetch person-to-person messages
+      const personRes = await ZOHO.CREATOR.DATA.getRecords({
+        app_name: "admiral-field-portal",
+        report_name: "PersonToPersonHiddenForm_Report",
+        criteria: `(SentBy == "${currentUser}" || RecievedBy == "${currentUser}")`,
+      });
+
+      personMessages = (personRes?.data || []).map((msg) => ({
         ...msg,
         Need_Highlight: msg.Need_Highlight === "true",
         Already_Highlighted: msg.Already_Highlighted === "true",
         Pin: msg.Pin === "true",
-      })),
-    ].sort((a, b) => new Date(a.Added_Time) - new Date(b.Added_Time));
-    console.log(allMsgs);
+      }));
+    } catch (error) {
+      // Check if it's the "no records found" error (code 9280)
+      if (error?.code === 9280) {
+        console.log(
+          "No person-to-person messages found for user:",
+          currentUser
+        );
+        // This is not really an error - just no records match the criteria
+        personMessages = [];
+      } else {
+        console.warn("Error fetching person messages:", error);
+        // For other errors, also continue with empty array
+      }
+    }
+
+    // Combine both arrays
+    const allMsgs = [...channelMessages, ...personMessages];
+
+    // Sort by time
+    allMsgs.sort((a, b) => new Date(a.Added_Time) - new Date(b.Added_Time));
+
+    console.log("Fetched messages:", allMsgs);
     return allMsgs;
   }
 );

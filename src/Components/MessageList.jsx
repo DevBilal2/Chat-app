@@ -1,6 +1,26 @@
 import { useState, useEffect, useRef } from "react";
+// Import DOMPurify for critical client-side HTML sanitization
+// NOTE: You must install this library: npm install dompurify
+import DOMPurify from "dompurify";
 
 // --- Icon Placeholders ---
+const PinIcon = ({ className = "", isSolid = true }) => (
+  <svg
+    className={`w-4 h-4 ${className}`}
+    viewBox="0 0 24 24"
+    fill={isSolid ? "currentColor" : "none"}
+    stroke={isSolid ? "none" : "currentColor"}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M10.151 5.448l2.977-2.977a1 1 0 011.414 0l1.838 1.838a1 1 0 010 1.414L15.3 7.828l3.657 3.657-3.12 3.12a2.5 2.5 0 01-3.536 0l-3.657-3.657-1.767 1.768a1 1 0 01-1.414 0l-1.838-1.838a1 1 0 010-1.414l2.977-2.977zm-3.89 3.89l1.767-1.767 3.657 3.657a.5.5 0 00.707 0l3.12-3.12.354.353a.5.5 0 000 .707l-3.657 3.657a2.5 2.5 0 01-3.536 0l-1.838-1.838a.5.5 0 00-.707 0l-.353.354zM9.5 22h5c.276 0 .5-.224.5-.5V17a.5.5 0 00-.5-.5h-5a.5.5 0 00-.5.5v4.5c0 .276.224.5.5.5z"
+      fillRule="evenodd"
+    />
+  </svg>
+);
 const DownloadIcon = ({ className = "" }) => (
   <svg
     className={`w-4 h-4 ${className}`}
@@ -52,29 +72,30 @@ const DocumentIcon = ({ className = "" }) => (
   </svg>
 );
 
-const MicrophoneIcon = ({ className = "" }) => (
-  <svg
-    className={`w-6 h-6 ${className}`}
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M19 11a7 7 0 01-7 7v1h2v-1a5 5 0 005-5h-2z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M12 18V20m0-8V2h2v10h-2z"
-    />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
+// NOTE: MicrophoneIcon is unused in this component but kept for completeness
+// const MicrophoneIcon = ({ className = "" }) => (
+//   <svg
+//     className={`w-6 h-6 ${className}`}
+//     fill="none"
+//     stroke="currentColor"
+//     viewBox="0 0 24 24"
+//     xmlns="http://www.w3.org/2000/svg"
+//   >
+//     <path
+//       strokeLinecap="round"
+//       strokeLinejoin="round"
+//       strokeWidth={2}
+//       d="M19 11a7 7 0 01-7 7v1h2v-1a5 5 0 005-5h-2z"
+//     />
+//     <path
+//       strokeLinecap="round"
+//       strokeLinejoin="round"
+//       strokeWidth={2}
+//       d="M12 18V20m0-8V2h2v10h-2z"
+//     />
+//     <circle cx="12" cy="7" r="4" />
+//   </svg>
+// );
 
 export default function MessageList({
   messages,
@@ -87,6 +108,12 @@ export default function MessageList({
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const [fullScreenImage, setFullScreenImage] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState({
+    top: 0,
+    left: 0,
+    isMine: false,
+  });
+  // -------------------------
 
   const dropdownRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -109,16 +136,28 @@ export default function MessageList({
     }
   };
 
-  const toggleDropdown = (msgId) => {
-    setOpenDropdownId(openDropdownId === msgId ? null : msgId);
+  const toggleDropdown = (msgId, event, isMine) => {
+    if (openDropdownId === msgId) {
+      setOpenDropdownId(null);
+      setDropdownPosition({ top: 0, left: 0, isMine: false });
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 5, // 5px below the button
+        left: isMine ? rect.right : rect.left, // Use left/right for positioning based on side
+        isMine: isMine,
+      });
+      setOpenDropdownId(msgId);
+    }
   };
 
   const handleImageClick = (url) => {
     setFullScreenImage(url);
   };
-
-  const dropdownClasses =
-    "absolute left-0 top-full mt-1 w-28 bg-white border border-gray-200 rounded shadow-md z-20 text-sm";
+  const dropdownClassesMine =
+    "absolute mt-1 w-28 bg-white border border-gray-200 rounded shadow-md z-500 text-sm";
+  const dropdownClassesOther =
+    "absolute mt-1 w-28 bg-white border border-gray-200 rounded shadow-md z-500 text-sm";
   const dropdownButtonClasses =
     "block w-full text-left px-3 py-1 hover:bg-gray-100 transition-colors duration-150";
 
@@ -152,37 +191,57 @@ export default function MessageList({
     const timeB = b.Added_Time ? new Date(b.Added_Time).getTime() : 0;
     return timeA - timeB;
   });
-
+  const decodeDelugeChars = (text) => {
+    if (!text) return text;
+    return text.replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex) =>
+      String.fromCodePoint(parseInt(hex, 16))
+    );
+  };
+  // 1. REVISED FUNCTION: Now handles HTML safely.
+  // It uses DOMPurify to sanitize the content, removing risky tags
+  // before injecting the HTML into the DOM.
   const renderMessageText = (text) => {
-    if (!text) return "";
-    const mentionRegex = /@(\w+)/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-    while ((match = mentionRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index));
-      }
-      const mention = match[1];
-      parts.push(
-        <span
-          key={`${mention}-${match.index}`}
-          style={{
-            color: "#00000",
-            fontWeight: 600,
-            padding: "0 2px",
-            borderRadius: "4px",
-          }}
-        >
-          @{mention}
-        </span>
-      );
-      lastIndex = match.index + match[0].length;
-    }
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
-    }
-    return parts;
+    if (!text) return null;
+
+    var decodedText = decodeDelugeChars(text);
+    // const mentionRegex = /@([a-zA-Z0-9_\s-]+)(?=\s|[,.?!:;]|$)/g;
+    // decodedText = decodedText.replace(
+    //   mentionRegex,
+    //   `<span data-mention="true" class="message-mention">@$1</span>`
+    // );
+    // decodedText = decodedText.replace(
+    //   /@(\S+)/g,
+    //   `<span data-mention="true" class="message-mention">@$1</span>`
+    // );
+
+    // Sanitize HTML
+    const cleanHtml = DOMPurify.sanitize(decodedText, {
+      ALLOWED_TAGS: [
+        "b",
+        "i",
+        "u",
+        "em",
+        "strong",
+        "a",
+        "p",
+        "div",
+        "ul",
+        "ol",
+        "li",
+        "pre",
+        "code",
+        "blockquote",
+        "span",
+      ],
+      ALLOWED_ATTR: ["href", "target", "class", "style", "data-mention-list"],
+    });
+
+    return (
+      <div
+        className="break-words text-left"
+        dangerouslySetInnerHTML={{ __html: cleanHtml }}
+      />
+    );
   };
 
   const isImageFile = (fileName) => {
@@ -194,7 +253,9 @@ export default function MessageList({
   const isAudioFile = (fileName) => {
     if (!fileName) return false;
     const extension = fileName.split(".").pop().toLowerCase();
-    return ["mp3", "ogg", "wav", "webm", "m4a"].includes(extension);
+    return ["mp3", "ogg", "wav", "webm", "m4a", "aac", "caf"].includes(
+      extension
+    );
   };
 
   const getCreatorFileUrl = (fileUpload) => {
@@ -225,7 +286,10 @@ export default function MessageList({
         ? channelMessageToken
         : personMessageToken;
 
-    const finalUrl = `https://creatorapp.zoho.com/${appOwner}/${appName}/report/${reportName}/${recordId}/${fieldName}/download-file/${token}?filepath=${fileName}`;
+    // const finalUrl = `https://creatorapp.zoho.com/${appOwner}/${appName}/report/${reportName}/${recordId}/${fieldName}/download-file/${token}?filepath=${fileName}`;
+    const finalUrl = `https://creatorapp.zoho.com/${appOwner}/${appName}/report/${reportName}/${recordId}/${fieldName}/download-file/${token}?filepath=${encodeURIComponent(
+      fileName
+    )}`;
 
     return { url: finalUrl, fileName: fileName };
   };
@@ -241,18 +305,28 @@ export default function MessageList({
               title={msg.Message}
               onClick={() => scrollToMessage(msg.ID)}
             >
-              <div className="font-medium">
-                {renderMessageText(msg.Message)}
+              {/* START CHANGE */}
+              <div className="font-medium flex-1 flex items-center min-w-0">
+                {/* Sender Name with light styling */}
+                <span className="text-xs font-semibold text-gray-600 mr-2 flex-shrink-0">
+                  {getSenderName(msg.SentBy)}:
+                </span>
+                {/* Message Content */}
+                <div className="truncate min-w-0">
+                  {renderMessageText(msg.Message)}
+                </div>
               </div>
-              <div className="flex space-x-2">
+              {/* END CHANGE */}
+              <div className="flex space-x-2 flex-shrink-0">
                 <button
-                  className="text-blue-600 text-sm underline"
+                  className="text-gray-500 hover:text-gray-700 transition-colors duration-150 flex items-center justify-center p-1"
                   onClick={(e) => {
                     e.stopPropagation();
                     onPinToggle(msg);
                   }}
+                  title="Unpin Message"
                 >
-                  Unpin
+                  <PinIcon className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -290,13 +364,20 @@ export default function MessageList({
                       className="px-1 text-sm font-bold"
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleDropdown(msg.ID);
+                        // --- UPDATED CALL ---
+                        toggleDropdown(msg.ID, e, true);
+                        // --------------------
                       }}
                     >
                       ⋮
                     </button>
-                    {openDropdownId === msg.ID && (
-                      <div className={dropdownClasses} ref={dropdownRef}>
+                    {/* {openDropdownId === msg.ID && (
+                      <div
+                        className={
+                          isMine ? dropdownClassesMine : dropdownClassesOther
+                        }
+                        ref={dropdownRef}
+                      >
                         <button
                           className={dropdownButtonClasses}
                           onClick={(e) => {
@@ -318,14 +399,14 @@ export default function MessageList({
                           Delete
                         </button>
                       </div>
-                    )}
+                    )} */}
                   </div>
                 )}
 
                 <div
                   className={`relative max-w-xs px-3 py-0.5 rounded-lg shadow ${
                     isMine
-                      ? "bg-blue-500 text-white rounded-br-none text-right"
+                      ? "bg-[#5F9EA0] text-white rounded-br-none text-right"
                       : "bg-gray-200 text-gray-800 rounded-bl-none text-left"
                   }`}
                 >
@@ -369,31 +450,15 @@ export default function MessageList({
                           </button>
                         ) : isAudio ? (
                           // --- ENHANCED AUDIO UI ---
-
                           <div className="flex flex-col flex-1 w-full ">
                             <audio
                               src={fileUrl}
                               controls
-                              className=" h-8 rounded-md"
-                              preload="metadata" // <- important
+                              className="h-8 rounded-md"
+                              preload="metadata" // important for iOS
                             >
                               Your browser does not support the audio element.
                             </audio>
-
-                            {/* <a
-                              href={fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              download={fileName}
-                              className={`flex-shrink-0 p-2 rounded-full transition-colors ${
-                                isMine
-                                  ? "text-white hover:bg-blue-700"
-                                  : "text-gray-500 hover:bg-gray-100"
-                              }`}
-                              title="Download Audio File"
-                            >
-                              <DownloadIcon className="w-5 h-5" />
-                            </a> */}
                           </div>
                         ) : (
                           <a
@@ -403,7 +468,7 @@ export default function MessageList({
                             download={fileName}
                             className={`flex items-center space-x-3 p-3 rounded-lg border-2 ${
                               isMine
-                                ? "bg-blue-600 text-white border-blue-700 hover:bg-blue-700"
+                                ? "bg-[#5F9EA0] text-white border-[#5F9EA0] hover:[#5F9EA9]"
                                 : "bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
                             } transition-colors duration-150 cursor-pointer w-full`}
                           >
@@ -427,9 +492,12 @@ export default function MessageList({
                             />
                           </a>
                         )}
+                        {/* 3. CONDITIONAL RENDERING UPDATE: Render message text if file is present (e.g., image caption) */}
                         {msg.Message && renderMessageText(msg.Message)}
                       </div>
                     )}
+
+                    {/* 4. CONDITIONAL RENDERING UPDATE: Render message text if NO file is present */}
                     {!fileUrl && msg.Message && renderMessageText(msg.Message)}
                   </div>
 
@@ -445,14 +513,19 @@ export default function MessageList({
                     <button
                       className="px-1 text-sm font-bold"
                       onClick={(e) => {
-                        e.stopPropagation();
-                        toggleDropdown(msg.ID);
+                        e.stopPropagation(); // --- INCORRECT: Should be `isMine` (which is false here) ---
+                        toggleDropdown(msg.ID, e, isMine); // <--- CHANGE THIS // --------------------
                       }}
                     >
                       ⋮
                     </button>
                     {openDropdownId === msg.ID && (
-                      <div className={dropdownClasses} ref={dropdownRef}>
+                      <div
+                        className={
+                          isMine ? dropdownClassesMine : dropdownClassesOther
+                        }
+                        ref={dropdownRef}
+                      >
                         <button
                           className={dropdownButtonClasses}
                           onClick={(e) => {
@@ -482,7 +555,52 @@ export default function MessageList({
           );
         })}
       </div>
-
+      {openDropdownId && (
+        <div
+          className={`fixed ${
+            // *** Change 'absolute' to 'fixed' here ***
+            // Using the existing classes for background/shadow
+            dropdownPosition.isMine
+              ? "bg-white border text-sm"
+              : "bg-white border text-sm"
+          } w-28 rounded shadow-md z-[500]`} // <- Consolidate necessary Tailwind classes
+          ref={dropdownRef}
+          style={{
+            top: `${dropdownPosition.top}px`, // If 'isMine' (right side), align the right edge of the dropdown with the right coordinate of the button.
+            right: dropdownPosition.isMine
+              ? `${window.innerWidth - dropdownPosition.left}px`
+              : "auto", // If 'isMine' is false (left side), align the left edge of the dropdown with the left coordinate of the button.
+            left: dropdownPosition.isMine
+              ? "auto"
+              : `${dropdownPosition.left}px`,
+          }}
+        >
+          <button
+            className={dropdownButtonClasses}
+            onClick={(e) => {
+              e.stopPropagation();
+              const msg = sortedMessages.find((m) => m.ID === openDropdownId);
+              if (msg) onPinToggle(msg);
+              setOpenDropdownId(null);
+            }}
+          >
+            {messages.find((m) => m.ID === openDropdownId)?.Pin
+              ? "Unpin"
+              : "Pin"}
+          </button>
+          <button
+            className={`${dropdownButtonClasses} text-red-500`}
+            onClick={(e) => {
+              e.stopPropagation();
+              const msg = sortedMessages.find((m) => m.ID === openDropdownId);
+              if (msg) onDeleteMessage(msg);
+              setOpenDropdownId(null);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
       {fullScreenImage && (
         <div
           className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4"

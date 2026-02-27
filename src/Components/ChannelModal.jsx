@@ -24,9 +24,13 @@ export default function ChannelModal({
       setLoading(false);
     });
 
-    ZOHO.CREATOR.UTIL.getInitParams().then((response) => {
-      if (response && response.loginUser) {
-        setCurrentUserEmail(response.loginUser);
+    ZOHO.CREATOR.UTIL.getInitParams().then((res) => {
+      console.log(res?.loginUser.includes("%40"));
+      if (res?.loginUser.includes("%40")) {
+        const decodedEmail = decodeURIComponent(res.loginUser);
+        setCurrentUserEmail(decodedEmail.trim().toLowerCase());
+      } else {
+        setCurrentUserEmail(res.loginUser);
       }
     });
   }, []);
@@ -48,55 +52,65 @@ export default function ChannelModal({
       new Set([...selectedMembers, currentUserEmail])
     );
 
-    var channelData = {
+    const channelData = {
       app_name: "admiral-field-portal",
       form_name: "ChannelsHiddenForm",
       payload: {
-        data: {
-          IDC: randomId,
-          ChannelName: channelName,
-          RecievedByC: finalMembers.join(","),
-          Message: "",
-          SentBy: currentUserEmail,
-        },
+        data: [
+          {
+            IDC: randomId,
+            ChannelName: channelName,
+            RecievedByC: finalMembers.join(","),
+            Message: "",
+            SentBy: currentUserEmail,
+          },
+        ],
       },
     };
 
     ZOHO.CREATOR.DATA.addRecords(channelData)
       .then((res) => {
-        console.log("✅ Channel created:", res);
         if (res.code === 3000) {
-          alert("Channel created successfully!");
-          onChannelCreated?.({ ID: randomId, ChannelName: channelName });
+          onChannelCreated?.({
+            ID: randomId,
+            ChannelName: channelName,
+            RecievedByC: finalMembers.join(","),
+          });
           onSelectChat?.(`#${channelName}`);
           onClose();
         } else {
-          alert("Failed to create channel. Check console.");
+          alert("Create failed");
         }
       })
       .catch((err) => {
-        console.error("❌ Error creating channel:", err);
+        alert("Error: " + JSON.stringify(err));
       });
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white text-black p-6 rounded-lg w-96 shadow-xl">
-        <h3 className="text-xl font-semibold mb-3">Create Channel</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1999] px-4">
+      <div className="bg-white text-black w-full max-w-sm sm:max-w-md md:max-w-lg p-5 rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h3 className="text-xl font-semibold mb-3 text-center">
+          Create Channel
+        </h3>
+
         <input
           placeholder="Channel name..."
           value={channelName}
           onChange={(e) => setChannelName(e.target.value)}
-          className="w-full border border-gray-300 rounded p-2 mb-3"
+          className="w-full border border-gray-300 rounded p-2 mb-3 text-[16px]"
         />
-        <div className="max-h-48 overflow-auto border border-gray-200 p-2 rounded">
+
+        <div className="max-h-52 overflow-auto border border-gray-200 p-2 rounded">
           {loading ? (
-            <p>Loading members...</p>
+            <p className="text-center text-gray-500 text-sm">
+              Loading members...
+            </p>
           ) : members.length > 0 ? (
             members.map((m, i) => (
               <label
                 key={i}
-                className="flex items-center gap-2 border-b border-gray-100 py-1"
+                className="flex items-center gap-2 border-b border-gray-100 py-1 text-sm"
               >
                 <input
                   type="checkbox"
@@ -107,18 +121,21 @@ export default function ChannelModal({
               </label>
             ))
           ) : (
-            <p>No members found.</p>
+            <p className="text-center text-gray-500 text-sm">
+              No members found.
+            </p>
           )}
         </div>
+
         <button
           onClick={handleCreate}
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded mt-3 py-2 transition-all"
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded mt-4 py-2 transition-all text-sm"
         >
           Create Channel
         </button>
         <button
           onClick={onClose}
-          className="w-full border border-gray-300 rounded mt-2 py-2"
+          className="w-full border border-gray-300 hover:bg-gray-100 rounded mt-2 py-2 text-sm"
         >
           Cancel
         </button>

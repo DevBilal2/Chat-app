@@ -17,11 +17,17 @@ export default function App() {
 
   // 🟢 Top notification banner
   const [topNotification, setTopNotification] = useState("");
-
+  console.log("notification", topNotification);
   // ========== Load Initial User ==========
   useEffect(() => {
     ZOHO.CREATOR.UTIL.getInitParams().then((res) => {
-      if (res?.loginUser) setCurrentUser(res.loginUser);
+      console.log(res?.loginUser.includes("%40"));
+      if (res?.loginUser.includes("%40")) {
+        const decodedEmail = decodeURIComponent(res.loginUser);
+        setCurrentUser(decodedEmail.trim().toLowerCase());
+      } else {
+        setCurrentUser(res.loginUser);
+      }
     });
   }, []);
 
@@ -95,19 +101,20 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden font-sans relative">
       {/* Top Notification */}
+
       {topNotification && (
         <Notification
           message={topNotification}
           onClose={handleCloseNotification}
         />
       )}
-
       <Sidebar
         allUsers={allUsers}
         currentUser={currentUser}
         messages={chatMessages}
         notifications={notifications} // Pass notifications to sidebar
         activeChannel={activeChannel}
+        setActiveChannel={setActiveChannel}
         activePerson={activePerson}
         onSelectPerson={handleSelectPerson}
         onSelectChat={handleSelectChannel}
@@ -115,13 +122,13 @@ export default function App() {
           handleNotify(targetId, senderName, messageText)
         }
       />
-
       <ChatContainer
         allUsers={allUsers}
         currentUser={currentUser}
         activeChannel={activeChannel}
         activePerson={activePerson}
         onMessagesUpdate={setChatMessages}
+        setActiveChannel={setActiveChannel}
         // Pass notification handler
       />
     </div>
